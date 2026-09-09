@@ -17,6 +17,12 @@ const router = createRouter({
       meta: { title: 'Игра - Tetrachord' },
     },
     {
+      path: '/lab',
+      name: 'lab',
+      component: () => import('@/views/LabView.vue'),
+      meta: { title: 'Lab - живой анализ звука' },
+    },
+    {
       path: '/:pathMatch(.*)*',
       name: 'not-found',
       component: () => import('@/views/NotFoundView.vue'),

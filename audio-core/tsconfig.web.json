@@ -1,0 +1,29 @@
+// Main-thread adapters: microphone capture, worker host. DOM is allowed here.
+// Worker and worklet entry files have their own global scopes and their own tsconfigs.
+//
+// This project emits declarations (nothing else) so that the application can reference it: the app
+// then type-checks against audio-core's `.d.ts` output instead of re-checking the sources under its
+// own, stricter-for-UI compiler options (e.g. `noUncheckedIndexedAccess`).
+{
+  "extends": "./tsconfig.core.json",
+  "include": ["core/**/*.ts", "io/**/*.ts", "host/web/**/*.ts"],
+  "exclude": [
+    "**/*.test.ts",
+    "core/testing/**",
+    "**/*.worker.ts",
+    "**/*.worklet.ts",
+    "host/web/opfs-pcm-store.ts"
+  ],
+  "compilerOptions": {
+    "tsBuildInfoFile": "../node_modules/.tmp/tsconfig.audio-core.web.tsbuildinfo",
+    "noEmit": false,
+    "emitDeclarationOnly": true,
+    "declaration": true,
+    "declarationMap": true,
+    "rootDir": ".",
+    "outDir": "../node_modules/.tmp/audio-core-web",
+    "lib": ["ES2024", "DOM", "DOM.Iterable"],
+    // `vite/client` declares the `?worker&url` import used to locate the worklet script.
+    "types": ["vite/client"]
+  }
+}

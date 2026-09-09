@@ -1,0 +1,31 @@
+// Type-checks the platform-agnostic core. No DOM, no Node: `lib` is pure ECMAScript and `types` is
+// empty, so any reference to `window`, `AudioContext`, `navigator`, `Buffer`... fails to compile.
+// Adapters that need browser APIs live in `io/` and `host/` with their own tsconfig.
+{
+  "include": ["core/**/*.ts"],
+  "exclude": ["core/**/*.test.ts", "core/testing/**"],
+  "compilerOptions": {
+    "composite": true,
+    "noEmit": true,
+    "tsBuildInfoFile": "../node_modules/.tmp/tsconfig.audio-core.tsbuildinfo",
+
+    "target": "ES2024",
+    "lib": ["ES2024"],
+    "types": [],
+
+    "module": "preserve",
+    "moduleResolution": "bundler",
+    "verbatimModuleSyntax": true,
+
+    "strict": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    // DSP code is index arithmetic over typed arrays; `number | undefined` on every `x[i]`
+    // would bury the math in `!`. Bounds are covered by tests instead.
+    "noUncheckedIndexedAccess": false,
+
+    "skipLibCheck": true
+  }
+}

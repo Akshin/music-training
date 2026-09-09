@@ -1,0 +1,10 @@
+// Dedicated worker entry: DedicatedWorkerGlobalScope, no DOM.
+{
+  "extends": "./tsconfig.core.json",
+  "include": ["core/**/*.ts", "host/web/**/*.worker.ts", "host/web/opfs-pcm-store.ts"],
+  "exclude": ["**/*.test.ts", "core/testing/**"],
+  "compilerOptions": {
+    "tsBuildInfoFile": "../node_modules/.tmp/tsconfig.audio-core.worker.tsbuildinfo",
+    "lib": ["ES2024", "WebWorker"]
+  }
+}
