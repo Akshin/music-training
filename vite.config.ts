@@ -5,11 +5,11 @@ import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import vueDevTools from 'vite-plugin-vue-devtools'
 
-const repoBase = '/tetrachord--guitar-training/'
+const repoBase = '/music-training/'
 
 // https://vite.dev/config/
 export default defineConfig(({ command }) => ({
-  // Project Pages URL: https://akshin.github.io/tetrachord--guitar-training/
+  // Project Pages URL: https://akshin.github.io/music-training/
   base: command === 'build' ? repoBase : '/',
   plugins: [
     vue(),
