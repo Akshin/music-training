@@ -9,6 +9,9 @@ import { renderClick } from '../../core/synthesis/click'
 import type { ClickLevel } from '../../core/synthesis/metronome'
 import { renderTone } from '../../core/synthesis/tone'
 
+/** Tone buffers kept at once. Every tempo mints new durations, so the cache must not grow freely. */
+const TONE_CACHE_LIMIT = 64
+
 export class WebSynth {
   readonly context: AudioContext
   private readonly clicks = new Map<ClickLevel, AudioBuffer>()
@@ -32,6 +35,7 @@ export class WebSynth {
     const key = `${midi}|${duration.toFixed(3)}|${velocity.toFixed(3)}`
     let buffer = this.tones.get(key)
     if (buffer === undefined) {
+      if (this.tones.size >= TONE_CACHE_LIMIT) this.tones.clear()
       buffer = this.toBuffer(renderTone(this.context.sampleRate, midi, duration, velocity))
       this.tones.set(key, buffer)
     }

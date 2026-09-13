@@ -34,8 +34,14 @@ export function clampBeats(value: number, fallback = BEATS_DEFAULT): number {
   return Math.min(BEATS_MAX, Math.max(BEATS_MIN, Math.round(value)))
 }
 
+export type Meter = {
+  beatsPerBar: number
+  /** Note value of one beat: 4 = quarter, 8 = eighth. */
+  beatUnit: number
+}
+
 /** Meter for a beats-per-measure choice: 6 is 6/8, felt as two groups of three eighths. */
-export function meterFor(beats: number): { beatsPerBar: number; beatUnit: number } {
+export function meterFor(beats: number): Meter {
   const option = TIME_SIGNATURES.find((candidate) => candidate.beats === beats)
   return { beatsPerBar: beats, beatUnit: option?.unit ?? 4 }
 }

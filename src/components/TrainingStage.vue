@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { computed, nextTick, onUnmounted, ref, watch } from 'vue'
+import { computed, nextTick, onUnmounted, ref, shallowRef, watch } from 'vue'
 import type { MapPosition } from '@audio-core/core/clock/tempo-map'
 import ModeScheme from '@/components/ModeScheme.vue'
 import type { MetronomeClock } from '@/composables/useMetronome'
-import { BEATS_DEFAULT, BPM_DEFAULT, secondsPerBeat } from '@/training/tempo'
+import type { CyclePlan } from '@/training/melody'
+import { BEATS_DEFAULT, BPM_DEFAULT, meterFor, secondsPerBeat, type Meter } from '@/training/tempo'
 import { randomMode, type ChangeEvery, type ModePattern } from '@/training/patterns'
 import { TAB_INSTRUMENT_DEFAULT, type TabInstrument } from '@/training/tabs'
 
@@ -28,6 +29,8 @@ const props = withDefaults(
 
 const emit = defineEmits<{
   'update:mode': [mode: ModePattern]
+  /** What should sound while playing: the running cycle and the next one. */
+  'update:plan': [plan: CyclePlan | null]
 }>()
 
 type Slot = {
@@ -46,7 +49,8 @@ const next = ref<Slot>(makeSlot(current.value.mode))
 const flyer = ref<ModePattern | null>(null)
 const flyerPhase = ref<'start' | 'lift' | 'go' | 'settle'>('start')
 const sliding = ref(false)
-const pendingAdvance = ref(false)
+/** The card in flight; it becomes `current` when it lands. */
+let moving: Slot | null = null
 const timers: number[] = []
 
 const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)')
@@ -57,6 +61,8 @@ const FALL_LEAD_MS = 420
 
 const leftMode = computed(() => current.value.mode)
 const rightMode = computed(() => next.value.mode)
+/** The mode of the running cycle, even while its card is still flying in. */
+const soundingMode = computed(() => flyer.value ?? current.value.mode)
 
 /** One pulse cycle: bars until the next change, at the current tempo and meter. */
 const cycleSeconds = computed(
@@ -65,8 +71,10 @@ const cycleSeconds = computed(
 
 const remaining = ref(cycleSeconds.value)
 /** Bar, within the clock's epoch, on which the current scheme appeared. */
-let cycleStartBar = 0
-let cycleEpoch = 0
+const cycleStartBar = ref(0)
+const cycleEpoch = ref(0)
+/** Meter of that epoch, once the clock has reported it. */
+const cycleMeter = shallowRef<Meter | null>(null)
 let rafId = 0
 
 const nextCaption = computed(() => `${remaining.value.toFixed(1)} с`)
@@ -79,25 +87,30 @@ function tickClock() {
 
 function followClock({ bar, beat, phase, epoch, grid }: MapPosition) {
   // A meter change restarts bar numbering on a downbeat: the cycle starts over there.
-  if (epoch !== cycleEpoch) {
-    cycleEpoch = epoch
-    cycleStartBar = bar
+  if (epoch !== cycleEpoch.value) {
+    cycleEpoch.value = epoch
+    cycleStartBar.value = bar
   }
-  const barsIn = bar - cycleStartBar
+  const { beatsPerBar, beatUnit } = grid.meter
+  const meter = cycleMeter.value
+  if (meter === null || meter.beatsPerBar !== beatsPerBar || meter.beatUnit !== beatUnit) {
+    cycleMeter.value = { beatsPerBar, beatUnit }
+  }
+  const barsIn = bar - cycleStartBar.value
   if (barsIn >= props.changeEvery) {
-    cycleStartBar += barsIn - (barsIn % props.changeEvery)
+    cycleStartBar.value += barsIn - (barsIn % props.changeEvery)
     advance()
   }
-  const { beatsPerBar } = grid.meter
   const cycleBeats = props.changeEvery * beatsPerBar
-  const beatsLeft = (cycleStartBar - bar) * beatsPerBar + cycleBeats - beat - phase
+  const beatsLeft = (cycleStartBar.value - bar) * beatsPerBar + cycleBeats - beat - phase
   remaining.value = Math.min(beatsLeft, cycleBeats) * grid.secondsPerBeat
 }
 
 function startClock() {
   stopClock()
-  cycleStartBar = 0
-  cycleEpoch = 0
+  cycleStartBar.value = 0
+  cycleEpoch.value = 0
+  cycleMeter.value = null
   remaining.value = cycleSeconds.value
   rafId = requestAnimationFrame(tickClock)
 }
@@ -125,7 +138,7 @@ function resetPair() {
   sliding.value = false
   flyerPhase.value = 'start'
   flyer.value = null
-  pendingAdvance.value = false
+  moving = null
   current.value = makeSlot()
   next.value = makeSlot(current.value.mode)
 }
@@ -140,7 +153,7 @@ watch(
     }
     stopClock()
     clearTimers()
-    pendingAdvance.value = false
+    moving = null
     sliding.value = false
     flyerPhase.value = 'start'
     flyer.value = null
@@ -158,37 +171,43 @@ watch(
   () => props.changeEvery,
   (every) => {
     const position = props.playing ? (props.clock?.() ?? null) : null
-    if (position === null || position.epoch !== cycleEpoch) return
-    if (position.bar - cycleStartBar >= every) cycleStartBar = position.bar + 1 - every
+    if (position === null || position.epoch !== cycleEpoch.value) return
+    if (position.bar - cycleStartBar.value >= every) cycleStartBar.value = position.bar + 1 - every
   },
 )
 
 function swapInstant() {
-  const moving = next.value
-  current.value = moving
-  next.value = makeSlot(moving.mode)
+  const arriving = next.value
+  current.value = arriving
+  next.value = makeSlot(arriving.mode)
 }
 
-function finishSlide(moving: Slot) {
+function finishSlide() {
+  if (moving === null) return
   current.value = moving
+  moving = null
   sliding.value = false
   // Keep the flyer covering the left slot for one frame so the seated card
   // is already opaque when the overlay drops. No fade-in.
   void nextTick(() => {
     requestAnimationFrame(() => {
+      // A new slide may have started in that frame; its flyer stays.
+      if (sliding.value) return
       flyer.value = null
       flyerPhase.value = 'start'
-      if (pendingAdvance.value) {
-        pendingAdvance.value = false
-        advance()
-      }
     })
   })
 }
 
 function advance() {
   if (sliding.value) {
-    pendingAdvance.value = true
+    // The next change came before the card landed: seat it and swap without motion, so the cards
+    // never fall behind what is heard.
+    clearTimers()
+    finishSlide()
+    flyer.value = null
+    flyerPhase.value = 'start'
+    swapInstant()
     return
   }
 
@@ -197,11 +216,12 @@ function advance() {
     return
   }
 
-  const moving = next.value
-  flyer.value = moving.mode
+  const arriving = next.value
+  moving = arriving
+  flyer.value = arriving.mode
   sliding.value = true
   flyerPhase.value = 'start'
-  next.value = makeSlot(moving.mode)
+  next.value = makeSlot(arriving.mode)
 
   void nextTick(() => {
     requestAnimationFrame(() => {
@@ -216,9 +236,7 @@ function advance() {
   after(LIFT_MS + Math.max(0, FLY_MS - FALL_LEAD_MS), () => {
     flyerPhase.value = 'settle'
   })
-  after(LIFT_MS + FLY_MS, () => {
-    finishSlide(moving)
-  })
+  after(LIFT_MS + FLY_MS, finishSlide)
 }
 
 watch(
@@ -229,8 +247,31 @@ watch(
   { immediate: true },
 )
 
+/**
+ * The running cycle and the one after it, in bars of the clock's epoch; `null` when silent. Ready as
+ * soon as play starts — before the first frame reports a position the meter comes from props, which
+ * is what the transport starts with — so the first notes are not late.
+ */
+const plan = computed<CyclePlan | null>(() => {
+  if (!props.playing) return null
+  const meter = cycleMeter.value ?? meterFor(props.beatsPerMeasure)
+  const start = cycleStartBar.value
+  const bars = props.changeEvery
+  return {
+    epoch: cycleEpoch.value,
+    meter,
+    cycles: [
+      { startBar: start, bars, mode: soundingMode.value },
+      { startBar: start + bars, bars, mode: rightMode.value },
+    ],
+  }
+})
+
+watch(plan, (value) => {
+  emit('update:plan', value)
+})
+
 onUnmounted(() => {
-  pendingAdvance.value = false
   stopClock()
   clearTimers()
 })

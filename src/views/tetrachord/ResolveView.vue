@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { nextTick, ref } from 'vue'
-import { PhCaretUp, PhMetronome, PhRepeat, PhTextT, PhX } from '@phosphor-icons/vue'
+import { nextTick, ref, shallowRef, watch } from 'vue'
+import { PhCaretUp, PhMetronome, PhMusicNotes, PhRepeat, PhTextT, PhX } from '@phosphor-icons/vue'
 import BpmControl from '@/components/BpmControl.vue'
 import IconSwitch from '@/components/IconSwitch.vue'
 import ModeBackdrop from '@/components/ModeBackdrop.vue'
@@ -10,6 +10,7 @@ import TabInstrumentControl from '@/components/TabInstrumentControl.vue'
 import TimeSignatureControl from '@/components/TimeSignatureControl.vue'
 import TrainingStage from '@/components/TrainingStage.vue'
 import { useMetronome } from '@/composables/useMetronome'
+import { melodyRoot, planMelody, type CyclePlan } from '@/training/melody'
 import { CHANGE_EVERY_DEFAULT, type ChangeEvery, type ModePattern } from '@/training/patterns'
 import { TAB_INSTRUMENT_DEFAULT, type TabInstrument } from '@/training/tabs'
 import { BEATS_DEFAULT, BPM_DEFAULT } from '@/training/tempo'
@@ -17,14 +18,23 @@ import { BEATS_DEFAULT, BPM_DEFAULT } from '@/training/tempo'
 const bpm = ref(BPM_DEFAULT)
 const beatsPerMeasure = ref(BEATS_DEFAULT)
 const playing = ref(false)
+const metronomeOn = ref(true)
+const melodyOn = ref(false)
 const changeEvery = ref<ChangeEvery>(CHANGE_EVERY_DEFAULT)
 const tabInstrument = ref<TabInstrument>(TAB_INSTRUMENT_DEFAULT)
 const showModeNames = ref(true)
 const currentMode = ref<ModePattern | null>(null)
+const plan = shallowRef<CyclePlan | null>(null)
 const consoleOpen = ref(true)
 const hideBtn = ref<HTMLButtonElement | null>(null)
 const revealBtn = ref<HTMLButtonElement | null>(null)
-const clock = useMetronome(playing, bpm, beatsPerMeasure)
+const sound = useMetronome({ playing, bpm, beats: beatsPerMeasure, clicks: metronomeOn })
+
+// The melody starts from the tonic the helper shows, so what is heard matches the tab or the keys.
+watch([plan, melodyOn, tabInstrument], ([cycles, on, instrument]) => {
+  const notes = on && cycles !== null ? planMelody(cycles, melodyRoot(instrument)) : []
+  sound.setNotes(notes, cycles?.epoch ?? 0)
+})
 
 function hideConsole() {
   consoleOpen.value = false
@@ -49,8 +59,9 @@ function showConsole() {
         :show-mode-name="showModeNames"
         :bpm="bpm"
         :beats-per-measure="beatsPerMeasure"
-        :clock="clock"
+        :clock="sound.clock"
         @update:mode="currentMode = $event"
+        @update:plan="plan = $event"
       />
 
       <footer class="dock">
@@ -76,7 +87,16 @@ function showConsole() {
                 </h2>
                 <div class="bay__body bay__body--rhythm">
                   <BpmControl v-model="bpm" compact />
-                  <TimeSignatureControl v-model="beatsPerMeasure" />
+                  <div class="bay__side">
+                    <TimeSignatureControl v-model="beatsPerMeasure" />
+                    <IconSwitch
+                      v-model="metronomeOn"
+                      label="Метроном"
+                      hint="Щелчки метронома. Схемы всё равно меняются по тактам."
+                    >
+                      <PhMetronome :size="18" weight="light" aria-hidden="true" />
+                    </IconSwitch>
+                  </div>
                 </div>
               </section>
 
@@ -92,14 +112,23 @@ function showConsole() {
                 <div class="bay__body bay__body--stack">
                   <SchemeChangeControl v-model="changeEvery" />
                   <TabInstrumentControl v-model="tabInstrument" />
-                  <IconSwitch
-                    v-model="showModeNames"
-                    label="Отображение лада"
-                    hint="Название лада под карточкой. Схемы не скрываются."
-                    wide
-                  >
-                    <PhTextT :size="18" weight="light" aria-hidden="true" />
-                  </IconSwitch>
+                  <div class="bay__switches">
+                    <IconSwitch
+                      v-model="showModeNames"
+                      label="Отображение лада"
+                      hint="Название лада под карточкой. Схемы не скрываются."
+                      wide
+                    >
+                      <PhTextT :size="18" weight="light" aria-hidden="true" />
+                    </IconSwitch>
+                    <IconSwitch
+                      v-model="melodyOn"
+                      label="Мелодия"
+                      hint="Гамма текущего лада восьмыми, вверх и вниз. Тоника C; с табами гитары — E, как на табах."
+                    >
+                      <PhMusicNotes :size="18" weight="light" aria-hidden="true" />
+                    </IconSwitch>
+                  </div>
                 </div>
               </section>
             </div>
@@ -285,6 +314,19 @@ function showConsole() {
 .bay__body--rhythm {
   flex-wrap: wrap;
   gap: 0.85rem 1.15rem;
+}
+
+.bay__side {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.55rem;
+}
+
+.bay__switches {
+  display: flex;
+  justify-content: center;
+  gap: 0.15rem;
 }
 
 .dock-reveal {

@@ -31,7 +31,7 @@ export { beatsPerGroup, metronomeClicks } from './synthesis/metronome'
 export type { NoteTrigger } from './synthesis/reference'
 export { majorArpeggio, referenceTriggers } from './synthesis/reference'
 export { renderClick } from './synthesis/click'
-export { renderTone } from './synthesis/tone'
+export { TONE_RELEASE_SECONDS, renderTone } from './synthesis/tone'
 
 // scoring
 export type { LatencyEstimate, LatencyOptions } from './scoring/latency'

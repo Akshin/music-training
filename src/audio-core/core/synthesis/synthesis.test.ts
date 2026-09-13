@@ -5,7 +5,7 @@ import { midiToHz } from '../model/pitch'
 import { renderClick } from './click'
 import { metronomeClicks } from './metronome'
 import { majorArpeggio, referenceTriggers } from './reference'
-import { renderTone } from './tone'
+import { renderTone, TONE_RELEASE_SECONDS } from './tone'
 
 describe('renderClick / renderTone', () => {
   it('downbeat is louder than a group accent, which is louder than a regular tick', () => {
@@ -23,17 +23,38 @@ describe('renderClick / renderTone', () => {
     expect(peak(bar)).toBeLessThanOrEqual(1)
   })
 
-  it('tone peaks at the requested MIDI and fades at the edges', () => {
+  it('tone starts and ends silent, peaks at its velocity and rings past its written length', () => {
     const sampleRate = 48000
     const samples = renderTone(sampleRate, 69, 0.1, 0.5)
     expect(samples[0]).toBe(0)
     expect(samples[samples.length - 1]).toBe(0)
+    expect(samples.length).toBe(Math.round(sampleRate * 0.1) + sampleRate * TONE_RELEASE_SECONDS)
     let peak = 0
     for (let i = 0; i < samples.length; i++) peak = Math.max(peak, Math.abs(samples[i]))
     expect(peak).toBeCloseTo(0.5, 2)
-    // A4 = 440 Hz: one period is 48000/440 samples; zero crossings ~ twice per period.
-    const period = sampleRate / midiToHz(69)
-    expect(period).toBeCloseTo(sampleRate / 440, 8)
+  })
+
+  it('tone is bright on the attack, settles onto its fundamental and decays', () => {
+    const sampleRate = 48000
+    const hz = midiToHz(69)
+    const samples = renderTone(sampleRate, 69, 1, 0.5)
+    // Magnitude of one frequency over 50 ms — whole periods of both 440 and 880 Hz.
+    const span = 2400
+    const magnitude = (from: number, f: number) => {
+      const w = (2 * Math.PI * f) / sampleRate
+      let re = 0
+      let im = 0
+      for (let i = from; i < from + span; i++) {
+        re += samples[i] * Math.cos(w * i)
+        im += samples[i] * Math.sin(w * i)
+      }
+      return Math.hypot(re, im)
+    }
+    const brightness = (from: number) => magnitude(from, 2 * hz) / magnitude(from, hz)
+    const body = sampleRate * 0.4
+    expect(brightness(0)).toBeGreaterThan(2 * brightness(body))
+    expect(brightness(body)).toBeLessThan(0.3)
+    expect(magnitude(sampleRate * 0.8, hz)).toBeLessThan(magnitude(sampleRate * 0.1, hz))
   })
 })
 

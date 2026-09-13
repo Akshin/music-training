@@ -21,6 +21,7 @@ export interface GridWindow {
   readonly from: number
   readonly to: number
   readonly grid: BeatGrid
+  readonly epoch: number
 }
 
 export interface MapPosition extends BarPosition {
@@ -78,10 +79,11 @@ export class TempoMap {
   windows(from: number, to: number): GridWindow[] {
     const out: GridWindow[] = []
     for (let i = 0; i < this.segments.length; i++) {
+      const { start, grid, epoch } = this.segments[i]
       const next = this.segments[i + 1]
-      const lo = Math.max(from, this.segments[i].start)
+      const lo = Math.max(from, start)
       const hi = Math.min(to, next === undefined ? Infinity : next.start)
-      if (lo < hi) out.push({ from: lo, to: hi, grid: this.segments[i].grid })
+      if (lo < hi) out.push({ from: lo, to: hi, grid, epoch })
     }
     return out
   }

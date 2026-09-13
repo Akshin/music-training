@@ -35,6 +35,10 @@ describe('TempoMap', () => {
     ])
     expect(map.positionAt(0.99).epoch).toBe(0)
     expect(map.positionAt(1)).toMatchObject({ epoch: 1, bar: 0, beat: 0 })
+    expect(map.windows(0, 3).map((w) => [w.from, w.epoch])).toEqual([
+      [0, 0],
+      [1, 1],
+    ])
   })
 
   it('drops pending changes so a dragged knob lands once', () => {
