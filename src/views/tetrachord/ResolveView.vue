@@ -1,16 +1,28 @@
 <script setup lang="ts">
-import { nextTick, ref, shallowRef, watch } from 'vue'
-import { PhCaretUp, PhMetronome, PhMusicNotes, PhRepeat, PhTextT, PhX } from '@phosphor-icons/vue'
+import { computed, nextTick, ref, shallowRef, watch } from 'vue'
+import {
+  PhCaretUp,
+  PhMetronome,
+  PhMusicNotes,
+  PhRepeat,
+  PhSpeakerHigh,
+  PhTextT,
+  PhWaveform,
+  PhX,
+} from '@phosphor-icons/vue'
 import BpmControl from '@/components/BpmControl.vue'
 import IconSwitch from '@/components/IconSwitch.vue'
+import KeyControl from '@/components/KeyControl.vue'
 import ModeBackdrop from '@/components/ModeBackdrop.vue'
 import PlayTransport from '@/components/PlayTransport.vue'
 import SchemeChangeControl from '@/components/SchemeChangeControl.vue'
 import TabInstrumentControl from '@/components/TabInstrumentControl.vue'
 import TimeSignatureControl from '@/components/TimeSignatureControl.vue'
 import TrainingStage from '@/components/TrainingStage.vue'
-import { useMetronome } from '@/composables/useMetronome'
-import { melodyRoot, planMelody, type CyclePlan } from '@/training/melody'
+import { useTrainingSound } from '@/composables/useTrainingSound'
+import { backingTrackUrl } from '@/training/backing'
+import { TONAL_KEY_DEFAULT, keyPitchClass, keyTonicMidi, type TonalKey } from '@/training/keys'
+import { planMelody, type CyclePlan } from '@/training/melody'
 import { CHANGE_EVERY_DEFAULT, type ChangeEvery, type ModePattern } from '@/training/patterns'
 import { TAB_INSTRUMENT_DEFAULT, type TabInstrument } from '@/training/tabs'
 import { BEATS_DEFAULT, BPM_DEFAULT } from '@/training/tempo'
@@ -19,7 +31,9 @@ const bpm = ref(BPM_DEFAULT)
 const beatsPerMeasure = ref(BEATS_DEFAULT)
 const playing = ref(false)
 const metronomeOn = ref(true)
+const tonalKey = ref<TonalKey>(TONAL_KEY_DEFAULT)
 const melodyOn = ref(false)
+const backingOn = ref(false)
 const changeEvery = ref<ChangeEvery>(CHANGE_EVERY_DEFAULT)
 const tabInstrument = ref<TabInstrument>(TAB_INSTRUMENT_DEFAULT)
 const showModeNames = ref(true)
@@ -28,11 +42,19 @@ const plan = shallowRef<CyclePlan | null>(null)
 const consoleOpen = ref(true)
 const hideBtn = ref<HTMLButtonElement | null>(null)
 const revealBtn = ref<HTMLButtonElement | null>(null)
-const sound = useMetronome({ playing, bpm, beats: beatsPerMeasure, clicks: metronomeOn })
+const tonic = computed(() => keyPitchClass(tonalKey.value))
+const backingUrl = computed(() => (backingOn.value ? backingTrackUrl(tonalKey.value) : null))
+const sound = useTrainingSound({
+  playing,
+  bpm,
+  beats: beatsPerMeasure,
+  clicks: metronomeOn,
+  backing: backingUrl,
+})
 
-// The melody starts from the tonic the helper shows, so what is heard matches the tab or the keys.
-watch([plan, melodyOn, tabInstrument], ([cycles, on, instrument]) => {
-  const notes = on && cycles !== null ? planMelody(cycles, melodyRoot(instrument)) : []
+// One tonal centre for everything: the pad, the melody and the tab or keys on the cards.
+watch([plan, melodyOn, tonalKey], ([cycles, on, key]) => {
+  const notes = on && cycles !== null ? planMelody(cycles, keyTonicMidi(key)) : []
   sound.setNotes(notes, cycles?.epoch ?? 0)
 })
 
@@ -60,6 +82,7 @@ function showConsole() {
         :bpm="bpm"
         :beats-per-measure="beatsPerMeasure"
         :clock="sound.clock"
+        :tonic="tonic"
         @update:mode="currentMode = $event"
         @update:plan="plan = $event"
       />
@@ -112,21 +135,42 @@ function showConsole() {
                 <div class="bay__body bay__body--stack">
                   <SchemeChangeControl v-model="changeEvery" />
                   <TabInstrumentControl v-model="tabInstrument" />
-                  <div class="bay__switches">
-                    <IconSwitch
-                      v-model="showModeNames"
-                      label="Отображение лада"
-                      hint="Название лада под карточкой. Схемы не скрываются."
-                      wide
-                    >
-                      <PhTextT :size="18" weight="light" aria-hidden="true" />
-                    </IconSwitch>
+                  <IconSwitch
+                    v-model="showModeNames"
+                    label="Отображение лада"
+                    hint="Название лада под карточкой. Схемы не скрываются."
+                    wide
+                  >
+                    <PhTextT :size="18" weight="light" aria-hidden="true" />
+                  </IconSwitch>
+                </div>
+              </section>
+
+              <div class="console__split" aria-hidden="true" />
+
+              <section class="bay bay--sound" aria-label="Звук">
+                <h2 class="bay__title">
+                  <span class="bay__mark">
+                    <PhSpeakerHigh :size="14" weight="light" aria-hidden="true" />
+                  </span>
+                  Звук
+                </h2>
+                <div class="bay__body bay__body--stack">
+                  <KeyControl v-model="tonalKey" />
+                  <div class="bay__switches" role="group" aria-label="Голоса">
                     <IconSwitch
                       v-model="melodyOn"
                       label="Мелодия"
-                      hint="Гамма текущего лада восьмыми, вверх и вниз. Тоника C; с табами гитары — E, как на табах."
+                      hint="Гамма текущего лада восьмыми, вверх и вниз, от тонального центра."
                     >
                       <PhMusicNotes :size="18" weight="light" aria-hidden="true" />
+                    </IconSwitch>
+                    <IconSwitch
+                      v-model="backingOn"
+                      label="Бэк-трек"
+                      hint="Струнная педаль в тональном центре."
+                    >
+                      <PhWaveform :size="18" weight="light" aria-hidden="true" />
                     </IconSwitch>
                   </div>
                 </div>
@@ -211,7 +255,7 @@ function showConsole() {
   position: relative;
   overflow: visible;
   display: grid;
-  grid-template-columns: minmax(0, 1.15fr) 1px minmax(12.5rem, 1fr);
+  grid-template-columns: minmax(0, 1.2fr) 1px minmax(12.5rem, 0.82fr) 1px minmax(0, 1.08fr);
   align-items: stretch;
   width: 100%;
   padding: 0.95rem 2.55rem 1.1rem 0.85rem;
@@ -408,6 +452,10 @@ function showConsole() {
 
   .bay--exercise {
     order: 2;
+  }
+
+  .bay--sound {
+    order: 3;
   }
 
   .bay__body--rhythm {

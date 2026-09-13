@@ -5,6 +5,8 @@ import { modeLabel, type ModePattern } from '@/training/patterns'
 
 const props = defineProps<{
   mode: ModePattern
+  /** Pitch class of the tonic, C = 0; C when absent. */
+  tonic?: number
 }>()
 
 const W = 240
@@ -18,7 +20,7 @@ const BLACK_W = WHITE_W * 0.58
 const BLACK_H = WHITE_H * 0.58
 const RX = 2.2
 
-const layout = computed(() => layoutPianoKeys(props.mode))
+const layout = computed(() => layoutPianoKeys(props.mode, props.tonic))
 
 function whiteX(index: number): number {
   return PAD_X + index * WHITE_W

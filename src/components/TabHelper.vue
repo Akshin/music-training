@@ -5,6 +5,8 @@ import { modeLabel, type ModePattern } from '@/training/patterns'
 
 const props = defineProps<{
   mode: ModePattern
+  /** Pitch class of the tonic, C = 0; E when absent. */
+  tonic?: number
 }>()
 
 const W = 240
@@ -15,7 +17,7 @@ const R = 5.6
 const STRING_COUNT = 6
 const FRETS = FIRST_POSITION_MAX
 
-const layout = computed(() => layoutModeMarks(props.mode))
+const layout = computed(() => layoutModeMarks(props.mode, props.tonic))
 
 const geo = computed(() => {
   const innerW = W - PAD_X * 2

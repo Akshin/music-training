@@ -41,29 +41,35 @@ function isModePitch(pc: number, mode: ModePattern): boolean {
   )
 }
 
-export function layoutPianoKeys(mode: ModePattern): {
+/** The octave C–C with the mode built on `tonic` (pitch class, C = 0) marked on it. */
+export function layoutPianoKeys(
+  mode: ModePattern,
+  tonic = 0,
+): {
   whites: PianoKey[]
   blacks: PianoKey[]
 } {
+  const fromTonic = (pc: number) => (((pc - tonic) % 12) + 12) % 12
+
   const whites = WHITE_PCS.map((pc, afterWhite) => {
-    const active = isModePitch(pc, mode)
+    const active = isModePitch(fromTonic(pc), mode)
     return {
       pc,
       isBlack: false,
       afterWhite,
       active,
-      via: viaForPitchClass(((pc % 12) + 12) % 12, mode).via,
+      via: viaForPitchClass(fromTonic(pc), mode).via,
     }
   })
 
   const blacks = BLACK_KEYS.map((entry) => {
-    const active = isModePitch(entry.pc, mode)
+    const active = isModePitch(fromTonic(entry.pc), mode)
     return {
       pc: entry.pc,
       isBlack: true,
       afterWhite: entry.afterWhite,
       active,
-      via: viaForPitchClass(entry.pc, mode).via,
+      via: viaForPitchClass(fromTonic(entry.pc), mode).via,
     }
   })
 

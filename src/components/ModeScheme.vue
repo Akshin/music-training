@@ -20,6 +20,8 @@ const props = withDefaults(
     /** Show diatonic mode name under the card when the pair matches. */
     showModeName?: boolean
     tabInstrument?: TabInstrument
+    /** Tonic pitch class (C = 0) the tab or keys are drawn from; each helper has its own default. */
+    tonic?: number
   }>(),
   {
     motion: true,
@@ -84,8 +86,13 @@ function schemeKey(pattern: SchemePattern, side: string): string {
     </div>
     </div>
 
-    <PianoHelper v-if="tabInstrument === 'piano'" class="mode__tab" :mode="mode" />
-    <TabHelper v-else-if="tabInstrument === 'guitar'" class="mode__tab" :mode="mode" />
+    <PianoHelper v-if="tabInstrument === 'piano'" class="mode__tab" :mode="mode" :tonic="tonic" />
+    <TabHelper
+      v-else-if="tabInstrument === 'guitar'"
+      class="mode__tab"
+      :mode="mode"
+      :tonic="tonic"
+    />
 
     <p v-if="showModeName && namedTitle" class="mode__name">{{ namedTitle }}</p>
   </article>

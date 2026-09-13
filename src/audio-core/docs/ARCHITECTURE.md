@@ -38,7 +38,7 @@ audio-core/
     testing/            генераторы сигналов и сравнение контуров — только для тестов
     index.ts            публичная поверхность
   io/                   источники: MicSource, LineInSource, FileSource, StreamSource
-  host/web/             capture.worklet, analysis.worker, WorkerHost, WebSynth, WebTransport
+  host/web/             capture.worklet, analysis.worker, WorkerHost, WebSynth, WebTransport, WebLoop
   docs/                 этот документ
 ```
 
@@ -239,6 +239,10 @@ capture.worklet ──pcm──▶ analysis.worker ──frames──▶ WorkerH
   запланированный отрезок, досылаются сразу; повторов нет (ключ — эпоха, доля, высота).
   `setMetronome` включает и выключает щелчки, сетка идёт дальше. Кэш тонов `WebSynth` ограничен:
   каждый темп даёт новые длительности.
+- **Записи.** `WebLoop` зацикливает декодированную запись (бэк-трек) на том же `AudioContext`:
+  `decode` — `decodeAudioData` браузера (mp3/ogg/wav), `play(buffer, when)` — петля с плавным
+  входом 0.6 с и одновременным уходом предыдущей, `stop` — плавный уход. Ядро записи не
+  декодирует и не синтезирует; это не второй синтезатор, а проигрыватель готового контента.
 - **Планировщики — чистые.** `metronomeClicks(grid, from, to)` и `referenceTriggers` отдают
   события окна. `WebTransport` спрашивает их каждые 25 мс на горизонт 100 мс (Chris Wilson);
   beat 0 = `audioOrigin` (старт + 80 мс).
@@ -360,6 +364,7 @@ Headless Chrome, `--use-file-for-fake-audio-capture` с WAV 220 Гц ±30 цен
 | 24  | WAV в core; прочие форматы — `decodeAudioData` в io                    | ядро без DOM; браузерный декодер не протекает в `tsconfig.core`                                |
 | 25  | pYIN офлайн с `pyinDelay: 0`, без Viterbi на весь take                 | лаг 0 = причинный MAP; хранить backpointers 40 мин нельзя по памяти                            |
 | 26  | Темп/размер меняются через `TempoMap` на ближайшей доле                | перезапуск транспорта — слышимый сбой; окно lookahead уже отдано синтезу                       |
+| 27  | Бэк-треки (mp3) декодирует браузер в `WebLoop`, не ядро                | записанную педаль синтезом не заменить; mp3 в ядре — бэклог                                    |
 
 ## Дорожная карта
 
@@ -385,8 +390,9 @@ Headless Chrome, `--use-file-for-fake-audio-capture` с WAV 220 Гц ±30 цен
   delay 0 на файле. **v1 ядра закрыт.** Дальше только за v1: аккорды, WASM, mp3 в core.
   178 тестов.
 - **Тренировки** ✔ `TempoMap` (темп и размер на лету), уровни щелчка и группы сложных размеров,
-  `WebTransport.retime` / `positionAt` / `setNotes` / `setMetronome`; метроном и мелодия лада в
-  тетрахордной тренировке; 185 тестов.
+  `WebTransport.retime` / `positionAt` / `setNotes` / `setMetronome`, FM-электропиано в
+  `renderTone`, `WebLoop` для бэк-треков; метроном, мелодия и педаль в тетрахордной тренировке;
+  186 тестов.
 
 ## Команды
 

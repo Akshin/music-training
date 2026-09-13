@@ -47,18 +47,26 @@ export function viaForPitchClass(pc: number, mode: ModePattern): { via: Interval
   return { via: last, degree: 1 }
 }
 
+/** Pitch class of the open low E string, C = 0. */
+const LOW_E_PITCH_CLASS = 4
+
 /**
- * Every mode note that sits in first position (frets 1–4) on every string.
- * Open strings stay off the grid so the box stays four cells.
+ * Every mode note that sits in first position (frets 1–4) on every string, for the mode built on
+ * `tonic` (pitch class, C = 0; E by default). Open strings stay off the grid so the box stays four
+ * cells.
  */
-export function layoutModeMarks(mode: ModePattern): { marks: FretMark[]; fretSpan: number } {
+export function layoutModeMarks(
+  mode: ModePattern,
+  tonic = LOW_E_PITCH_CLASS,
+): { marks: FretMark[]; fretSpan: number } {
   const marks: FretMark[] = []
 
   for (let string = 0; string < STRING_SEMITONES.length; string++) {
     const open = STRING_SEMITONES[string]
     if (open === undefined) continue
     for (let fret = FIRST_POSITION_MIN; fret <= FIRST_POSITION_MAX; fret++) {
-      const pitch = open + fret
+      // Semitones above the tonic.
+      const pitch = LOW_E_PITCH_CLASS + open + fret - tonic
       const pc = ((pitch % 12) + 12) % 12
       const inMode = modeDegreeOffsets(mode).some(
         (entry) => ((entry.semitone % 12) + 12) % 12 === pc,

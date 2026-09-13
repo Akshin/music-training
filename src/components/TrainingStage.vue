@@ -2,7 +2,7 @@
 import { computed, nextTick, onUnmounted, ref, shallowRef, watch } from 'vue'
 import type { MapPosition } from '@audio-core/core/clock/tempo-map'
 import ModeScheme from '@/components/ModeScheme.vue'
-import type { MetronomeClock } from '@/composables/useMetronome'
+import type { TrainingClock } from '@/composables/useTrainingSound'
 import type { CyclePlan } from '@/training/melody'
 import { BEATS_DEFAULT, BPM_DEFAULT, meterFor, secondsPerBeat, type Meter } from '@/training/tempo'
 import { randomMode, type ChangeEvery, type ModePattern } from '@/training/patterns'
@@ -17,7 +17,9 @@ const props = withDefaults(
     bpm?: number
     beatsPerMeasure?: number
     /** Audio-clock position while playing; schemes change on its bar lines. */
-    clock?: MetronomeClock
+    clock?: TrainingClock
+    /** Tonic pitch class (C = 0) the helpers on the cards are drawn from. */
+    tonic?: number
   }>(),
   {
     tabInstrument: TAB_INSTRUMENT_DEFAULT,
@@ -289,6 +291,7 @@ onUnmounted(() => {
           caption="Сейчас"
           :motion="false"
           :tab-instrument="tabInstrument"
+          :tonic="tonic"
           :show-mode-name="showModeName"
         />
       </article>
@@ -299,6 +302,7 @@ onUnmounted(() => {
           caption-count
           quiet
           :tab-instrument="tabInstrument"
+          :tonic="tonic"
           :show-mode-name="showModeName"
         />
       </article>
@@ -319,6 +323,7 @@ onUnmounted(() => {
           :quiet="flyerPhase === 'start'"
           :lifted="flyerPhase === 'lift' || flyerPhase === 'go'"
           :tab-instrument="tabInstrument"
+          :tonic="tonic"
           :show-mode-name="showModeName"
         />
       </div>

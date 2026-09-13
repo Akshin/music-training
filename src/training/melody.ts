@@ -1,12 +1,6 @@
 import { modeDegreeOffsets } from '@/training/fretboard'
 import type { ModePattern } from '@/training/patterns'
-import type { TabInstrument } from '@/training/tabs'
 import type { Meter } from '@/training/tempo'
-
-/** C4, middle C: the piano helper's tonic and the default when no helper is shown. */
-export const MELODY_ROOT = 60
-/** E4: the tonic the guitar tab marks (the tab is built from the low E string). */
-export const MELODY_ROOT_GUITAR = 64
 
 /** What should sound while a training plays: the running cycle and the one after it. */
 export type CyclePlan = {
@@ -21,11 +15,6 @@ export type MelodyNote = {
   startBeat: number
   durationBeats: number
   velocity: number
-}
-
-/** The tonic the chosen helper shows, so the melody matches the tab or the keys on screen. */
-export function melodyRoot(instrument: TabInstrument): number {
-  return instrument === 'guitar' ? MELODY_ROOT_GUITAR : MELODY_ROOT
 }
 
 /** Eight MIDI pitches of the mode from `root`: lower tetrachord, ТС, upper tetrachord. */
