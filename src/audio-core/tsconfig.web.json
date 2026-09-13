@@ -15,13 +15,13 @@
     "host/web/opfs-pcm-store.ts"
   ],
   "compilerOptions": {
-    "tsBuildInfoFile": "../node_modules/.tmp/tsconfig.audio-core.web.tsbuildinfo",
+    "tsBuildInfoFile": "../../node_modules/.tmp/tsconfig.audio-core.web.tsbuildinfo",
     "noEmit": false,
     "emitDeclarationOnly": true,
     "declaration": true,
     "declarationMap": true,
     "rootDir": ".",
-    "outDir": "../node_modules/.tmp/audio-core-web",
+    "outDir": "../../node_modules/.tmp/audio-core-web",
     "lib": ["ES2024", "DOM", "DOM.Iterable"],
     // `vite/client` declares the `?worker&url` import used to locate the worklet script.
     "types": ["vite/client"]

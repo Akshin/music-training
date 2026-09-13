@@ -1,48 +1,24 @@
 <script setup lang="ts">
-import { computed, nextTick, onUnmounted, ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { PhPlay, PhStop } from '@phosphor-icons/vue'
-import { backingTrack } from '@/audio/backingTrack'
-import { melodyVoice, unlockAudio } from '@/audio/melody'
-import {
-  BEATS_DEFAULT,
-  BPM_DEFAULT,
-  Metronome,
-  secondsPerBeat,
-  type BeatEvent,
-} from '@/audio/metronome'
+import { BPM_DEFAULT, secondsPerBeat } from '@/training/tempo'
 
 const props = withDefaults(
   defineProps<{
     modelValue?: boolean
     bpm?: number
-    beatsPerMeasure?: number
-    clicks?: boolean
   }>(),
   {
     modelValue: false,
     bpm: BPM_DEFAULT,
-    beatsPerMeasure: BEATS_DEFAULT,
-    clicks: true,
   },
 )
 
 const emit = defineEmits<{
   'update:modelValue': [playing: boolean]
-  downbeat: [event: BeatEvent]
-  'schedule-downbeat': [event: BeatEvent]
 }>()
 
 const playing = ref(props.modelValue)
-const metronome = new Metronome({
-  bpm: props.bpm,
-  beatsPerMeasure: props.beatsPerMeasure,
-  onBeat: (event) => {
-    if (event.isDownbeat) emit('downbeat', event)
-  },
-  onSchedule: (event) => {
-    if (event.isDownbeat) emit('schedule-downbeat', event)
-  },
-})
 
 watch(
   () => props.modelValue,
@@ -52,77 +28,13 @@ watch(
 )
 
 const pulseDuration = computed(() => `${secondsPerBeat(props.bpm)}s`)
-const caption = computed(() =>
-  playing.value ? 'Остановить тренировку' : 'Начать тренировку',
-)
+const caption = computed(() => (playing.value ? 'Остановить тренировку' : 'Начать тренировку'))
 const captionShort = computed(() => (playing.value ? 'Стоп' : 'Начать'))
 
-async function play() {
-  if (playing.value) return
-  try {
-    const ctx = await unlockAudio()
-    await melodyVoice.ready()
-    playing.value = true
-    emit('update:modelValue', true)
-    await nextTick()
-    await metronome.start(ctx)
-    backingTrack.setSession(true)
-  } catch {
-    melodyVoice.silence()
-    backingTrack.setSession(false)
-    metronome.stop()
-    playing.value = false
-    emit('update:modelValue', false)
-  }
-}
-
-function stop() {
-  if (!playing.value) return
-  melodyVoice.silence()
-  backingTrack.setSession(false)
-  metronome.stop()
-  playing.value = false
-  emit('update:modelValue', false)
-}
-
 function toggle() {
-  if (playing.value) stop()
-  else void play()
+  playing.value = !playing.value
+  emit('update:modelValue', playing.value)
 }
-
-watch(playing, (on) => {
-  if (!on) {
-    melodyVoice.silence()
-    backingTrack.setSession(false)
-    metronome.stop()
-  }
-})
-
-watch(
-  () => props.bpm,
-  (bpm) => {
-    metronome.setBpm(bpm)
-  },
-)
-
-watch(
-  () => props.beatsPerMeasure,
-  (beats) => {
-    metronome.setBeatsPerMeasure(beats)
-  },
-)
-
-watch(
-  () => props.clicks,
-  (on) => {
-    metronome.setClicks(on)
-  },
-  { immediate: true },
-)
-
-onUnmounted(() => {
-  metronome.dispose()
-})
 </script>
 
 <template>

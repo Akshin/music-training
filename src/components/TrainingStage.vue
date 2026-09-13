@@ -1,11 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onUnmounted, ref, watch } from 'vue'
 import ModeScheme from '@/components/ModeScheme.vue'
-import {
-  BEATS_DEFAULT,
-  BPM_DEFAULT,
-  secondsPerBeat,
-} from '@/audio/metronome'
+import { BEATS_DEFAULT, BPM_DEFAULT, secondsPerBeat } from '@/training/tempo'
 import { randomMode, type ChangeEvery, type ModePattern } from '@/training/patterns'
 import { TAB_INSTRUMENT_DEFAULT, type TabInstrument } from '@/training/tabs'
 
@@ -13,7 +9,6 @@ const props = withDefaults(
   defineProps<{
     playing: boolean
     changeEvery: ChangeEvery
-    downbeatSeq: number
     tabInstrument?: TabInstrument
     showModeName?: boolean
     bpm?: number
@@ -47,10 +42,7 @@ const next = ref<Slot>(makeSlot(current.value.mode))
 const flyer = ref<ModePattern | null>(null)
 const flyerPhase = ref<'start' | 'lift' | 'go' | 'settle'>('start')
 const sliding = ref(false)
-const armed = ref(true)
-const completedMeasures = ref(0)
 const pendingAdvance = ref(false)
-let lastDownbeatSeq = props.downbeatSeq
 const timers: number[] = []
 
 const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)')
@@ -62,43 +54,44 @@ const FALL_LEAD_MS = 420
 const leftMode = computed(() => current.value.mode)
 const rightMode = computed(() => next.value.mode)
 
-const clock = ref(0)
-let lastDownbeatAt = 0
+/** One pulse cycle: bars until the next change, at the current tempo and meter. */
+const cycleSeconds = computed(
+  () => secondsPerBeat(props.bpm) * props.beatsPerMeasure * props.changeEvery,
+)
+
+const remaining = ref(cycleSeconds.value)
+let cycleStartedAt = 0
 let rafId = 0
 
-function measureSeconds(): number {
-  return secondsPerBeat(props.bpm) * props.beatsPerMeasure
+const nextCaption = computed(() => `${remaining.value.toFixed(1)} с`)
+
+function restartCycle() {
+  cycleStartedAt = performance.now()
+  remaining.value = cycleSeconds.value
 }
 
-function measuresUntilChange(): number {
-  if (!props.playing || armed.value) return props.changeEvery
-  const intoCycle = completedMeasures.value % props.changeEvery
-  return props.changeEvery - intoCycle
+function tickClock() {
+  const left = cycleSeconds.value - (performance.now() - cycleStartedAt) / 1000
+  if (left <= 0) {
+    restartCycle()
+    advance()
+  } else {
+    remaining.value = left
+  }
+  rafId = requestAnimationFrame(tickClock)
 }
 
-function remainingSeconds(): number {
-  const bar = measureSeconds()
-  const bars = measuresUntilChange()
-  if (!props.playing || armed.value || lastDownbeatAt === 0) return bars * bar
-  const elapsed = (performance.now() - lastDownbeatAt) / 1000
-  return Math.max(0, bars * bar - elapsed)
+function startClock() {
+  stopClock()
+  restartCycle()
+  rafId = requestAnimationFrame(tickClock)
 }
-
-const nextCaption = computed(() => {
-  void clock.value
-  return `${remainingSeconds().toFixed(1)} с`
-})
 
 function stopClock() {
   if (rafId !== 0) {
     cancelAnimationFrame(rafId)
     rafId = 0
   }
-}
-
-function tickClock() {
-  clock.value = performance.now()
-  rafId = requestAnimationFrame(tickClock)
 }
 
 function clearTimers() {
@@ -118,43 +111,33 @@ function resetPair() {
   flyerPhase.value = 'start'
   flyer.value = null
   pendingAdvance.value = false
-  completedMeasures.value = 0
   current.value = makeSlot()
   next.value = makeSlot(current.value.mode)
 }
 
 watch(
   () => props.playing,
-  (on, wasOn) => {
-    if (on && !wasOn) {
-      lastDownbeatSeq = props.downbeatSeq
-      armed.value = true
-      lastDownbeatAt = 0
+  (on) => {
+    if (on) {
       resetPair()
-      stopClock()
-      tickClock()
+      startClock()
+      return
     }
-    if (!on) {
-      completedMeasures.value = 0
-      pendingAdvance.value = false
-      armed.value = true
-      lastDownbeatAt = 0
-      stopClock()
-      clock.value = 0
-      clearTimers()
-      sliding.value = false
-      flyerPhase.value = 'start'
-      flyer.value = null
-    }
+    stopClock()
+    clearTimers()
+    pendingAdvance.value = false
+    sliding.value = false
+    flyerPhase.value = 'start'
+    flyer.value = null
+    remaining.value = cycleSeconds.value
   },
 )
 
-watch(
-  () => props.changeEvery,
-  () => {
-    completedMeasures.value = 0
-  },
-)
+// Tempo, meter and change rate all resize the cycle — restart it so the countdown stays honest.
+watch(cycleSeconds, (seconds) => {
+  if (props.playing) restartCycle()
+  else remaining.value = seconds
+})
 
 function swapInstant() {
   const moving = next.value
@@ -215,31 +198,7 @@ function advance() {
 }
 
 watch(
-  () => props.downbeatSeq,
-  (seq) => {
-    if (!props.playing) {
-      lastDownbeatSeq = seq
-      return
-    }
-    if (seq === lastDownbeatSeq) return
-    lastDownbeatSeq = seq
-    lastDownbeatAt = performance.now()
-    if (armed.value) {
-      armed.value = false
-      return
-    }
-    completedMeasures.value += 1
-    if (completedMeasures.value % props.changeEvery === 0) advance()
-  },
-)
-
-const upcomingMode = computed(() => {
-  const nextBarAdvances = !armed.value && (completedMeasures.value + 1) % props.changeEvery === 0
-  return nextBarAdvances ? next.value.mode : current.value.mode
-})
-
-watch(
-  upcomingMode,
+  leftMode,
   (mode) => {
     emit('update:mode', mode)
   },

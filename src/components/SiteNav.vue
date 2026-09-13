@@ -4,25 +4,23 @@ import { useRoute } from 'vue-router'
 
 const route = useRoute()
 const onHome = computed(() => route.path === '/')
-const onPlay = computed(() => route.path === '/play')
+const links = computed(() => route.meta.nav ?? [])
 </script>
 
 <template>
   <header class="nav-wrap">
     <nav class="nav" aria-label="Основное">
-      <RouterLink
-        to="/"
-        class="nav__brand"
-        :aria-current="onHome ? 'page' : undefined"
-      >
-        Tetrachord
+      <RouterLink to="/" class="nav__brand" :aria-current="onHome ? 'page' : undefined">
+        Тренировки
       </RouterLink>
       <RouterLink
-        to="/play"
+        v-for="link in links"
+        :key="link.to"
+        :to="link.to"
         class="nav__link"
-        :aria-current="onPlay ? 'page' : undefined"
+        :aria-current="route.path === link.to ? 'page' : undefined"
       >
-        Игра
+        {{ link.label }}
       </RouterLink>
     </nav>
   </header>

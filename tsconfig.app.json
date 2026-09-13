@@ -1,10 +1,10 @@
 {
   "extends": "@vue/tsconfig/tsconfig.dom.json",
   "include": ["env.d.ts", "src/**/*", "src/**/*.vue"],
-  "exclude": ["src/**/__tests__/*"],
-  // The audio engine is checked by its own project (its own lib/strictness); the app consumes
-  // its emitted declarations.
-  "references": [{ "path": "./audio-core/tsconfig.web.json" }],
+  // The audio engine lives in src/ but is checked by its own project (its own lib/strictness);
+  // the app consumes its emitted declarations instead of re-checking its sources.
+  "exclude": ["src/**/__tests__/*", "src/audio-core/**"],
+  "references": [{ "path": "./src/audio-core/tsconfig.web.json" }],
   "compilerOptions": {
     // Extra safety for array and object lookups, but may have false positives.
     "noUncheckedIndexedAccess": true,
@@ -12,7 +12,7 @@
     // Path mapping for cleaner imports.
     "paths": {
       "@/*": ["./src/*"],
-      "@audio-core/*": ["./audio-core/*"]
+      "@audio-core/*": ["./src/audio-core/*"]
     },
 
     // `vue-tsc --build` produces a .tsbuildinfo file for incremental type-checking.

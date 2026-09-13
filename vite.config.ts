@@ -25,7 +25,7 @@ export default defineConfig(({ command }) => ({
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),
-      '@audio-core': fileURLToPath(new URL('./audio-core', import.meta.url)),
+      '@audio-core': fileURLToPath(new URL('./src/audio-core', import.meta.url)),
     },
   },
   worker: {

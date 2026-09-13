@@ -4,7 +4,7 @@
   "include": ["core/**/*.ts", "host/web/**/*.worker.ts", "host/web/opfs-pcm-store.ts"],
   "exclude": ["**/*.test.ts", "core/testing/**"],
   "compilerOptions": {
-    "tsBuildInfoFile": "../node_modules/.tmp/tsconfig.audio-core.worker.tsbuildinfo",
+    "tsBuildInfoFile": "../../node_modules/.tmp/tsconfig.audio-core.worker.tsbuildinfo",
     "lib": ["ES2024", "WebWorker"]
   }
 }

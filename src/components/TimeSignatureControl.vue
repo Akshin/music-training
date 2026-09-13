@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
 import { PhTimer } from '@phosphor-icons/vue'
-import { BEATS_DEFAULT, TIME_SIGNATURES, clampBeats } from '@/audio/metronome'
+import { BEATS_DEFAULT, TIME_SIGNATURES, clampBeats } from '@/training/tempo'
 
 const props = withDefaults(
   defineProps<{

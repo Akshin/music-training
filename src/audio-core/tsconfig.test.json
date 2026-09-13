@@ -5,7 +5,7 @@
   "include": ["core/**/*.ts"],
   "exclude": [],
   "compilerOptions": {
-    "tsBuildInfoFile": "../node_modules/.tmp/tsconfig.audio-core.test.tsbuildinfo",
+    "tsBuildInfoFile": "../../node_modules/.tmp/tsconfig.audio-core.test.tsbuildinfo",
     // Tests run under Node (structuredClone, performance...). Production core code is still
     // checked without any host types by tsconfig.core.json.
     "types": ["node"]

@@ -8,19 +8,19 @@
       "path": "./tsconfig.app.json"
     },
     {
-      "path": "./audio-core/tsconfig.core.json"
+      "path": "./src/audio-core/tsconfig.core.json"
     },
     {
-      "path": "./audio-core/tsconfig.test.json"
+      "path": "./src/audio-core/tsconfig.test.json"
     },
     {
-      "path": "./audio-core/tsconfig.web.json"
+      "path": "./src/audio-core/tsconfig.web.json"
     },
     {
-      "path": "./audio-core/tsconfig.worker.json"
+      "path": "./src/audio-core/tsconfig.worker.json"
     },
     {
-      "path": "./audio-core/tsconfig.worklet.json"
+      "path": "./src/audio-core/tsconfig.worklet.json"
     }
   ]
 }

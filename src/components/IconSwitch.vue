@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { unlockAudio } from '@/audio/melody'
 
 const props = withDefaults(
   defineProps<{
@@ -10,12 +9,9 @@ const props = withDefaults(
     hint?: string
     /** Stretch the caption for longer labels like «Отображение лада». */
     wide?: boolean
-    /** Unlock the shared AudioContext when switching on. Off for visual-only toggles. */
-    unlockOn?: boolean
   }>(),
   {
     wide: false,
-    unlockOn: true,
   },
 )
 
@@ -26,9 +22,7 @@ const emit = defineEmits<{
 }>()
 
 function toggle() {
-  const next = !props.modelValue
-  emit('update:modelValue', next)
-  if (next && props.unlockOn) void unlockAudio()
+  emit('update:modelValue', !props.modelValue)
 }
 </script>
 

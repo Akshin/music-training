@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { PhGauge } from '@phosphor-icons/vue'
-import { BPM_DEFAULT, BPM_MAX, BPM_MIN, clampBpm } from '../audio/metronome'
+import { BPM_DEFAULT, BPM_MAX, BPM_MIN, clampBpm } from '@/training/tempo'
 
 /** Visual dial sweep: hard left → hard right. */
 const ANGLE_MIN = -135

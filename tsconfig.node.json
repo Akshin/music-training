@@ -4,7 +4,7 @@
   "include": [
     "vite.config.*",
     "vitest.config.*",
-    "audio-core/vitest.config.*",
+    "src/audio-core/vitest.config.*",
     "cypress.config.*",
     "playwright.config.*",
     "eslint.config.*"

@@ -16,7 +16,7 @@ import {
   schemeId,
   type SchemePattern,
 } from '@/training/patterns'
-import { BEATS_DEFAULT, BPM_DEFAULT, secondsPerBeat } from '@/audio/metronome'
+import { BEATS_DEFAULT, BPM_DEFAULT, secondsPerBeat } from '@/training/tempo'
 
 type PracticeScheme = readonly [StepKind, StepKind, StepKind]
 
@@ -47,12 +47,12 @@ const demoCountdown = `${(secondsPerBeat(BPM_DEFAULT) * BEATS_DEFAULT * CHANGE_E
     <section class="hero">
       <div class="hero__copy">
         <p class="kicker">Как устроена тренировка</p>
-        <h1 class="hero__title">Две схемы, связующий тон, лад под метроном</h1>
+        <h1 class="hero__title">Две схемы, связующий тон, лад под пульс</h1>
         <p class="hero__lead">
           Слева играешь то, что сейчас. Справа видишь, что будет дальше. Карточка сама переезжает —
           ты не останавливаешься.
         </p>
-        <RouterLink to="/play" class="cta">
+        <RouterLink to="/tetrachord-training/resolve" class="cta">
           Играть
           <span class="cta__icon" aria-hidden="true">
             <PhArrowUpRight :size="16" weight="light" />
@@ -91,7 +91,7 @@ const demoCountdown = `${(secondsPerBeat(BPM_DEFAULT) * BEATS_DEFAULT * CHANGE_E
         <li>
           <span class="steps__n">1</span>
           <div>
-            <h3>Открой игру</h3>
+            <h3>Открой тренировку</h3>
             <p>
               Слева карточка «Сейчас», справа следующий лад и секунды до смены. Это один лад и
               следующий.
@@ -101,10 +101,10 @@ const demoCountdown = `${(secondsPerBeat(BPM_DEFAULT) * BEATS_DEFAULT * CHANGE_E
         <li>
           <span class="steps__n">2</span>
           <div>
-            <h3>Поставь тональность и Play</h3>
+            <h3>Задай темп и нажми Play</h3>
             <p>
-              Метроном лучше не выключать. Мелодия за такт проходит все восемь нот лада — по ней
-              слышно, что показывать на грифе. Бэк-трек по желанию.
+              Темп и размер такта держат пульс. Вместе с частотой смены они и решают, сколько секунд
+              живёт карточка.
             </p>
           </div>
         </li>
@@ -258,10 +258,7 @@ const demoCountdown = `${(secondsPerBeat(BPM_DEFAULT) * BEATS_DEFAULT * CHANGE_E
       <dl class="gear__list">
         <div>
           <dt>Ритм</dt>
-          <dd>
-            Темп, размер такта, метроном. Клики можно выключить — схемы всё равно сменяются по
-            пульсу.
-          </dd>
+          <dd>Темп и размер такта. Из них складывается пульс, по которому уезжает карточка.</dd>
         </div>
         <div>
           <dt>Упражнение</dt>
@@ -270,16 +267,12 @@ const demoCountdown = `${(secondsPerBeat(BPM_DEFAULT) * BEATS_DEFAULT * CHANGE_E
             лада» прячет название под карточкой.
           </dd>
         </div>
-        <div>
-          <dt>Звук</dt>
-          <dd>Одна тональность на мелодию и бэк. Мелодия — восемь нот лада за такт.</dd>
-        </div>
       </dl>
     </section>
 
     <section class="closer">
       <p class="closer__line">Дальше только гриф.</p>
-      <RouterLink to="/play" class="cta">
+      <RouterLink to="/tetrachord-training/resolve" class="cta">
         Играть
         <span class="cta__icon" aria-hidden="true">
           <PhArrowUpRight :size="16" weight="light" />

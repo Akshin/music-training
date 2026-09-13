@@ -24,9 +24,9 @@ export default defineConfigWithVueTs(
 
   {
     // The audio core is platform-agnostic: it must not know about adapters, the app or the UI stack.
-    // The compiler enforces "no DOM" (audio-core/tsconfig.core.json); this enforces "no imports".
+    // The compiler enforces "no DOM" (src/audio-core/tsconfig.core.json); this enforces "no imports".
     name: 'audio-core/boundaries',
-    files: ['audio-core/core/**/*.ts'],
+    files: ['src/audio-core/core/**/*.ts'],
     rules: {
       'no-restricted-imports': [
         'error',
@@ -41,7 +41,7 @@ export default defineConfigWithVueTs(
               message: 'audio-core/core must not depend on the application.',
             },
           ],
-          paths: ['vue', 'pinia', 'vue-router', 'tone'],
+          paths: ['vue', 'vue-router'],
         },
       ],
     },
