@@ -22,5 +22,30 @@ export default defineConfigWithVueTs(
 
   ...pluginOxlint.buildFromOxlintConfigFile('.oxlintrc.json'),
 
+  {
+    // The audio core is platform-agnostic: it must not know about adapters, the app or the UI stack.
+    // The compiler enforces "no DOM" (audio-core/tsconfig.core.json); this enforces "no imports".
+    name: 'audio-core/boundaries',
+    files: ['audio-core/core/**/*.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: ['**/io/**', '**/host/**'],
+              message: 'audio-core/core must not depend on io/ or host/ adapters.',
+            },
+            {
+              group: ['@/**'],
+              message: 'audio-core/core must not depend on the application.',
+            },
+          ],
+          paths: ['vue', 'pinia', 'vue-router', 'tone'],
+        },
+      ],
+    },
+  },
+
   skipFormatting,
 )

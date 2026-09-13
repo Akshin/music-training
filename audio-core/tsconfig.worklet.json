@@ -1,0 +1,12 @@
+// AudioWorklet entry: AudioWorkletGlobalScope (from @types/audioworklet), no DOM.
+// The worklet must stay tiny; it only imports the shared message types from core/transport.
+{
+  "extends": "./tsconfig.core.json",
+  "include": ["core/**/*.ts", "host/web/**/*.worklet.ts"],
+  "exclude": ["**/*.test.ts", "core/testing/**"],
+  "compilerOptions": {
+    "tsBuildInfoFile": "../node_modules/.tmp/tsconfig.audio-core.worklet.tsbuildinfo",
+    "lib": ["ES2024"],
+    "types": ["audioworklet"]
+  }
+}

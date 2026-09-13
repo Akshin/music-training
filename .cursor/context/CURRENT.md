@@ -2,6 +2,19 @@
 
 Vue 3 + Vite play view at `/play`. Install with `--legacy-peer-deps`.
 
+## Audio core
+
+`audio-core/` is a separate, platform-agnostic engine (capture → analysis → scoring → synthesis)
+for vocal training; the app is one consumer. Decisions, data model, algorithms and roadmap live in
+`audio-core/docs/ARCHITECTURE.md` — read it before touching the core. `core/` compiles without DOM
+(`audio-core/tsconfig.core.json`) and may not import `io/`, `host/`, `@/` or `vue`/`tone`.
+Tests: `npm run test:core`. Docs in Russian, code in English. **Engine v1 complete (M1–M7):**
+mic → worklet → worker tape/OPFS → `/lab` (pitch/level/spectrum, Mauch notes, gestures, WAV,
+metronome/reference, scoring, vibrato/formants/LUFS, pYIN, CPP, Superflux, file/stream
+sources). Beyond v1: chords, WASM, mp3-in-core.
+Five tsconfigs in `audio-core/` (core/test/web/worker/worklet); the app consumes the engine via a
+project reference to `tsconfig.web.json` (d.ts only), never by re-checking its sources.
+
 ## Product
 
 Tetrachord training: two schemes joined by ТС make a лад. Colors: tone green, semitone yellow, ТС gray. Practice schemes: **S1** TTS, **S2** TST, **S3** STT. Combo like `S1 + S3` sits above the card.

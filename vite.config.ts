@@ -25,6 +25,11 @@ export default defineConfig(({ command }) => ({
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),
+      '@audio-core': fileURLToPath(new URL('./audio-core', import.meta.url)),
     },
+  },
+  worker: {
+    // The analysis worker is an ES module (`new Worker(url, { type: 'module' })`).
+    format: 'es',
   },
 }))
