@@ -6,12 +6,12 @@
  */
 
 import { renderClick } from '../../core/synthesis/click'
+import type { ClickLevel } from '../../core/synthesis/metronome'
 import { renderTone } from '../../core/synthesis/tone'
 
 export class WebSynth {
   readonly context: AudioContext
-  private clickAccent: AudioBuffer | undefined
-  private clickTick: AudioBuffer | undefined
+  private readonly clicks = new Map<ClickLevel, AudioBuffer>()
   private readonly tones = new Map<string, AudioBuffer>()
   private readonly live = new Set<AudioBufferSourceNode>()
 
@@ -19,8 +19,12 @@ export class WebSynth {
     this.context = context
   }
 
-  click(when: number, accent: boolean): void {
-    const buffer = this.clickBuffer(accent)
+  click(when: number, level: ClickLevel): void {
+    let buffer = this.clicks.get(level)
+    if (buffer === undefined) {
+      buffer = this.toBuffer(renderClick(this.context.sampleRate, level))
+      this.clicks.set(level, buffer)
+    }
     this.play(buffer, when)
   }
 
@@ -43,15 +47,6 @@ export class WebSynth {
       }
     }
     this.live.clear()
-  }
-
-  private clickBuffer(accent: boolean): AudioBuffer {
-    if (accent) {
-      this.clickAccent ??= this.toBuffer(renderClick(this.context.sampleRate, true))
-      return this.clickAccent
-    }
-    this.clickTick ??= this.toBuffer(renderClick(this.context.sampleRate, false))
-    return this.clickTick
   }
 
   private toBuffer(samples: Float32Array): AudioBuffer {

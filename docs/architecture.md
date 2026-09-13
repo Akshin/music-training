@@ -23,8 +23,11 @@ src/
                      SchemeCircle, TetrachordScheme, ModeScheme, IntervalScheme,
                      TabHelper/PianoHelper, PlayTransport, TrainingStage, SiteNav,
                      ModeBackdrop, IconSwitch)
+  composables/       связка экранов со звуком (useMetronome — метроном и
+                     аудиочасы тренировки поверх audio-core)
   training/          чистая логика без звука и DOM (tempo.ts — BPM/meter math,
-                     secondsPerBeat; modeBackgrounds.ts — маппинг ладов на фоны)
+                     secondsPerBeat, meterFor; modeBackgrounds.ts — маппинг
+                     ладов на фоны)
   lab/               живой анализ звука для /lab (draw.ts)
   audio-core/        звуковой движок, см. ниже
   assets/            статика (bg/ — фоны по ладам)
@@ -71,10 +74,18 @@ tracks, метроном) выпилен; тренировки, которым �
 Play, потом Ритм, потом Упражнение. Заголовки кластеров и полей —
 Phosphor-иконка + подпись.
 
-`TrainingStage` крутится на собственном `requestAnimationFrame`-цикле: один
-цикл = `secondsPerBeat × beatsPerMeasure × changeEvery`; обратный отсчёт
-считается от wall-clock, поэтому самокорректируется после пропущенных
-кадров.
+Звук экрана — `useMetronome(playing, bpm, beatsPerMeasure)`: метроном на
+`WebTransport`, который стартует с кнопкой Play и меняет темп/размер без
+перезапуска. Размер 6/8 — шесть восьмых (BPM считает восьмые), акценты на 1 и 4.
+
+`TrainingStage` получает от него `clock` — позицию в такте по `AudioContext`
+с поправкой на выходную латентность — и сверяется с ней на каждом
+`requestAnimationFrame`: схема меняется на сильной доле каждого
+`changeEvery`-го такта, обратный отсчёт считается в долях текущего темпа.
+Смена темпа цикл не сбрасывает, смена размера начинает его заново с ближайшей
+сильной доли, уменьшение `changeEvery` ниже уже сыгранного — смена на
+следующей тактовой черте. Без игры отсчёт показывает полный цикл
+`secondsPerBeat × beatsPerMeasure × changeEvery`.
 
 Фоны ладов (`src/assets/bg/`) замаплены в `training/modeBackgrounds.ts`,
 импортируются eagerly, `ResolveView` кросс-фейдит их (во всю ширину,

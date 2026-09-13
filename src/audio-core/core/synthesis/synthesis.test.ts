@@ -8,17 +8,19 @@ import { majorArpeggio, referenceTriggers } from './reference'
 import { renderTone } from './tone'
 
 describe('renderClick / renderTone', () => {
-  it('accent click is louder and longer-tailed than a regular tick', () => {
-    const accent = renderClick(48000, true)
-    const tick = renderClick(48000, false)
-    expect(accent.length).toBe(tick.length)
+  it('downbeat is louder than a group accent, which is louder than a regular tick', () => {
+    const bar = renderClick(48000, 'bar')
+    const group = renderClick(48000, 'group')
+    const tick = renderClick(48000, 'beat')
+    expect(bar.length).toBe(tick.length)
     const peak = (samples: Float32Array) => {
       let max = 0
       for (let i = 0; i < samples.length; i++) max = Math.max(max, Math.abs(samples[i]))
       return max
     }
-    expect(peak(accent)).toBeGreaterThan(peak(tick))
-    expect(peak(accent)).toBeLessThanOrEqual(1)
+    expect(peak(bar)).toBeGreaterThan(peak(group))
+    expect(peak(group)).toBeGreaterThan(peak(tick))
+    expect(peak(bar)).toBeLessThanOrEqual(1)
   })
 
   it('tone peaks at the requested MIDI and fades at the edges', () => {
@@ -40,9 +42,26 @@ describe('metronomeClicks', () => {
     const grid = new BeatGrid({ bpm: 120, meter: { beatsPerBar: 3, beatUnit: 4 } })
     const clicks = metronomeClicks(grid, 0, grid.secondsPerBar * 2)
     expect(clicks).toHaveLength(6)
-    expect(clicks.filter((c) => c.accent).map((c) => c.beat)).toEqual([0, 3])
+    expect(clicks.filter((c) => c.level === 'bar').map((c) => c.beat)).toEqual([0, 3])
     expect(clicks.map((c) => c.beatInBar)).toEqual([0, 1, 2, 0, 1, 2])
     expect(clicks[1].time).toBeCloseTo(0.5, 12)
+  })
+
+  it('feels 6/8 in two groups of three eighths', () => {
+    const grid = new BeatGrid({ bpm: 180, meter: { beatsPerBar: 6, beatUnit: 8 } })
+    const clicks = metronomeClicks(grid, 0, grid.secondsPerBar)
+    expect(clicks.map((c) => c.level)).toEqual(['bar', 'beat', 'beat', 'group', 'beat', 'beat'])
+  })
+
+  it('keeps simple meters and 3/8 in a single group', () => {
+    for (const meter of [
+      { beatsPerBar: 6, beatUnit: 4 },
+      { beatsPerBar: 3, beatUnit: 8 },
+    ]) {
+      const grid = new BeatGrid({ bpm: 120, meter })
+      const levels = metronomeClicks(grid, 0, grid.secondsPerBar).map((c) => c.level)
+      expect(levels.filter((level) => level !== 'beat')).toEqual(['bar'])
+    }
   })
 })
 

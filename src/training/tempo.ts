@@ -11,15 +11,17 @@ export const BEATS_DEFAULT = 4
 export type TimeSignatureOption = {
   label: string
   beats: number
+  /** Note value of one beat (4 = quarter, 8 = eighth). BPM always counts these beats. */
+  unit: number
 }
 
 /** Common practice meters for the transport. */
 export const TIME_SIGNATURES: readonly TimeSignatureOption[] = [
-  { label: '2/4', beats: 2 },
-  { label: '3/4', beats: 3 },
-  { label: '4/4', beats: 4 },
-  { label: '5/4', beats: 5 },
-  { label: '6/8', beats: 6 },
+  { label: '2/4', beats: 2, unit: 4 },
+  { label: '3/4', beats: 3, unit: 4 },
+  { label: '4/4', beats: 4, unit: 4 },
+  { label: '5/4', beats: 5, unit: 4 },
+  { label: '6/8', beats: 6, unit: 8 },
 ] as const
 
 export function clampBpm(value: number, fallback = BPM_DEFAULT): number {
@@ -30,6 +32,12 @@ export function clampBpm(value: number, fallback = BPM_DEFAULT): number {
 export function clampBeats(value: number, fallback = BEATS_DEFAULT): number {
   if (!Number.isFinite(value)) return fallback
   return Math.min(BEATS_MAX, Math.max(BEATS_MIN, Math.round(value)))
+}
+
+/** Meter for a beats-per-measure choice: 6 is 6/8, felt as two groups of three eighths. */
+export function meterFor(beats: number): { beatsPerBar: number; beatUnit: number } {
+  const option = TIME_SIGNATURES.find((candidate) => candidate.beats === beats)
+  return { beatsPerBar: beats, beatUnit: option?.unit ?? 4 }
 }
 
 export function secondsPerBeat(bpm: number): number {

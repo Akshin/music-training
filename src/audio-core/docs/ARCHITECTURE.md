@@ -27,7 +27,7 @@
 audio-core/
   core/                 платформонезависимое ядро (без DOM и Node)
     model/              AudioChunk, Timeline, NoteEvent, питч-утилиты
-    clock/              BeatGrid — музыкальное время (доли ↔ секунды)
+    clock/              BeatGrid — музыкальное время (доли ↔ секунды); TempoMap — смена темпа/размера
     dsp/                Fft/RealFft, окна, уровень, парабола, Yin, biquad, K-weight, Burg LPC
     analysis/           контракт экстрактора, граф, FrameBuffer, Analyzer, registry, extractors/
     transport/          протокол сообщений, BufferPool, FrameBatcher, TimelineMirror — без DOM
@@ -220,9 +220,18 @@ capture.worklet ──pcm──▶ analysis.worker ──frames──▶ WorkerH
 Один `NoteEvent[]` и один `BeatGrid` для того, что слышит ученик, и для того, с чем сравнивает
 оценка. Расходиться им негде.
 
-- **PCM в ядре.** `renderClick` — два затухающих партиала, пик ≤ 0.72; `renderTone` — синус с
-  8 мс краями. Host (`WebSynth`) только кладёт эти семплы в `AudioBuffer` и ставит
-  `AudioBufferSourceNode.start(when)` на `AudioContext.currentTime`. Ворклет синтеза не делает.
+- **PCM в ядре.** `renderClick` — два затухающих партиала, три уровня: `bar` (пик 0.72), `group`
+  (0.58), `beat` (0.45); `renderTone` — синус с 8 мс краями. Host (`WebSynth`) только кладёт эти
+  семплы в `AudioBuffer` и ставит `AudioBufferSourceNode.start(when)` на
+  `AudioContext.currentTime`. Ворклет синтеза не делает.
+- **Акценты.** `metronomeClicks` ставит `level`: сильная доля, начало группы, прочие доли.
+  Сложные размеры (6/8, 9/8, 12/8) группируют восьмые по три (`beatsPerGroup`), остальные — одна
+  группа на такт.
+- **Темп на лету.** `TempoMap` — сегменты `BeatGrid`; `change` вступает на первой доле не раньше
+  запрошенного момента. Темп сохраняет нумерацию долей и тактов, размер открывает новую эпоху с
+  сильной доли; ещё не наступившие изменения заменяются. `WebTransport.retime` зовёт его с
+  курсором планировщика, `windows` режет окно lookahead по сегментам, `positionAt` отдаёт UI ту же
+  сетку.
 - **Планировщики — чистые.** `metronomeClicks(grid, from, to)` и `referenceTriggers` отдают
   события окна. `WebTransport` спрашивает их каждые 25 мс на горизонт 100 мс (Chris Wilson);
   beat 0 = `audioOrigin` (старт + 80 мс).
@@ -343,6 +352,7 @@ Headless Chrome, `--use-file-for-fake-audio-capture` с WAV 220 Гц ±30 цен
 | 23  | Mauch HMM — опция `method: 'mauch'`; greedy по умолчанию               | слайды и живой оверлей остаются жадными; Tony — один проход на Стоп/файл                       |
 | 24  | WAV в core; прочие форматы — `decodeAudioData` в io                    | ядро без DOM; браузерный декодер не протекает в `tsconfig.core`                                |
 | 25  | pYIN офлайн с `pyinDelay: 0`, без Viterbi на весь take                 | лаг 0 = причинный MAP; хранить backpointers 40 мин нельзя по памяти                            |
+| 26  | Темп/размер меняются через `TempoMap` на ближайшей доле                | перезапуск транспорта — слышимый сбой; окно lookahead уже отдано синтезу                       |
 
 ## Дорожная карта
 
@@ -367,6 +377,8 @@ Headless Chrome, `--use-file-for-fake-audio-capture` с WAV 220 Гц ±30 цен
   `analyzeWav` / `FileSource` / `StreamSource`, `/lab` открывает файл без микрофона; pYIN
   delay 0 на файле. **v1 ядра закрыт.** Дальше только за v1: аккорды, WASM, mp3 в core.
   178 тестов.
+- **Тренировки** ✔ `TempoMap` (темп и размер на лету), уровни щелчка и группы сложных размеров,
+  `WebTransport.retime` / `positionAt`; метроном тетрахордной тренировки; 185 тестов.
 
 ## Команды
 

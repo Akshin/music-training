@@ -9,6 +9,7 @@ import SchemeChangeControl from '@/components/SchemeChangeControl.vue'
 import TabInstrumentControl from '@/components/TabInstrumentControl.vue'
 import TimeSignatureControl from '@/components/TimeSignatureControl.vue'
 import TrainingStage from '@/components/TrainingStage.vue'
+import { useMetronome } from '@/composables/useMetronome'
 import { CHANGE_EVERY_DEFAULT, type ChangeEvery, type ModePattern } from '@/training/patterns'
 import { TAB_INSTRUMENT_DEFAULT, type TabInstrument } from '@/training/tabs'
 import { BEATS_DEFAULT, BPM_DEFAULT } from '@/training/tempo'
@@ -23,6 +24,7 @@ const currentMode = ref<ModePattern | null>(null)
 const consoleOpen = ref(true)
 const hideBtn = ref<HTMLButtonElement | null>(null)
 const revealBtn = ref<HTMLButtonElement | null>(null)
+const clock = useMetronome(playing, bpm, beatsPerMeasure)
 
 function hideConsole() {
   consoleOpen.value = false
@@ -47,6 +49,7 @@ function showConsole() {
         :show-mode-name="showModeNames"
         :bpm="bpm"
         :beats-per-measure="beatsPerMeasure"
+        :clock="clock"
         @update:mode="currentMode = $event"
       />
 

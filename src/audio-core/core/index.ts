@@ -22,10 +22,12 @@ export { Column, Timeline } from './model/timeline'
 // clock
 export type { BarPosition, BeatGridSpec, Meter, NearestBeat } from './clock/beat-grid'
 export { BeatGrid, COMMON_TIME } from './clock/beat-grid'
+export type { GridChange, GridSegment, GridWindow, MapPosition } from './clock/tempo-map'
+export { TempoMap } from './clock/tempo-map'
 
 // synthesis
-export type { ClickEvent } from './synthesis/metronome'
-export { metronomeClicks } from './synthesis/metronome'
+export type { ClickEvent, ClickLevel } from './synthesis/metronome'
+export { beatsPerGroup, metronomeClicks } from './synthesis/metronome'
 export type { NoteTrigger } from './synthesis/reference'
 export { majorArpeggio, referenceTriggers } from './synthesis/reference'
 export { renderClick } from './synthesis/click'

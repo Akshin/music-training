@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, nextTick, onUnmounted, ref, watch } from 'vue'
+import type { MapPosition } from '@audio-core/core/clock/tempo-map'
 import ModeScheme from '@/components/ModeScheme.vue'
+import type { MetronomeClock } from '@/composables/useMetronome'
 import { BEATS_DEFAULT, BPM_DEFAULT, secondsPerBeat } from '@/training/tempo'
 import { randomMode, type ChangeEvery, type ModePattern } from '@/training/patterns'
 import { TAB_INSTRUMENT_DEFAULT, type TabInstrument } from '@/training/tabs'
@@ -13,6 +15,8 @@ const props = withDefaults(
     showModeName?: boolean
     bpm?: number
     beatsPerMeasure?: number
+    /** Audio-clock position while playing; schemes change on its bar lines. */
+    clock?: MetronomeClock
   }>(),
   {
     tabInstrument: TAB_INSTRUMENT_DEFAULT,
@@ -60,30 +64,41 @@ const cycleSeconds = computed(
 )
 
 const remaining = ref(cycleSeconds.value)
-let cycleStartedAt = 0
+/** Bar, within the clock's epoch, on which the current scheme appeared. */
+let cycleStartBar = 0
+let cycleEpoch = 0
 let rafId = 0
 
 const nextCaption = computed(() => `${remaining.value.toFixed(1)} с`)
 
-function restartCycle() {
-  cycleStartedAt = performance.now()
-  remaining.value = cycleSeconds.value
+function tickClock() {
+  const position = props.clock?.() ?? null
+  if (position !== null) followClock(position)
+  rafId = requestAnimationFrame(tickClock)
 }
 
-function tickClock() {
-  const left = cycleSeconds.value - (performance.now() - cycleStartedAt) / 1000
-  if (left <= 0) {
-    restartCycle()
-    advance()
-  } else {
-    remaining.value = left
+function followClock({ bar, beat, phase, epoch, grid }: MapPosition) {
+  // A meter change restarts bar numbering on a downbeat: the cycle starts over there.
+  if (epoch !== cycleEpoch) {
+    cycleEpoch = epoch
+    cycleStartBar = bar
   }
-  rafId = requestAnimationFrame(tickClock)
+  const barsIn = bar - cycleStartBar
+  if (barsIn >= props.changeEvery) {
+    cycleStartBar += barsIn - (barsIn % props.changeEvery)
+    advance()
+  }
+  const { beatsPerBar } = grid.meter
+  const cycleBeats = props.changeEvery * beatsPerBar
+  const beatsLeft = (cycleStartBar - bar) * beatsPerBar + cycleBeats - beat - phase
+  remaining.value = Math.min(beatsLeft, cycleBeats) * grid.secondsPerBeat
 }
 
 function startClock() {
   stopClock()
-  restartCycle()
+  cycleStartBar = 0
+  cycleEpoch = 0
+  remaining.value = cycleSeconds.value
   rafId = requestAnimationFrame(tickClock)
 }
 
@@ -133,11 +148,20 @@ watch(
   },
 )
 
-// Tempo, meter and change rate all resize the cycle — restart it so the countdown stays honest.
+// Idle, the countdown previews a full cycle; while playing the clock drives it and follows tempo.
 watch(cycleSeconds, (seconds) => {
-  if (props.playing) restartCycle()
-  else remaining.value = seconds
+  if (!props.playing) remaining.value = seconds
 })
+
+// Shortened below what has already played: change on the next bar line rather than mid-bar.
+watch(
+  () => props.changeEvery,
+  (every) => {
+    const position = props.playing ? (props.clock?.() ?? null) : null
+    if (position === null || position.epoch !== cycleEpoch) return
+    if (position.bar - cycleStartBar >= every) cycleStartBar = position.bar + 1 - every
+  },
+)
 
 function swapInstant() {
   const moving = next.value

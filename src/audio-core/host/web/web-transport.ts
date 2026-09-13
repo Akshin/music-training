@@ -4,10 +4,12 @@
  * A 25 ms timer asks the platform-agnostic metronome/reference planners for the next 100 ms of
  * events and hands them to `WebSynth` with audio-clock timestamps. Beat 0 is `origin` (default:
  * a short delay after `start`), so scoring can use the same `BeatGrid` with `origin: 0` plus the
- * recorded `audioOrigin`.
+ * recorded `audioOrigin`. Tempo and meter change on the fly through a core `TempoMap`, so what is
+ * scheduled and what `positionAt` reports come from the same grids.
  */
 
 import type { BeatGrid } from '../../core/clock/beat-grid'
+import { TempoMap, type GridChange, type MapPosition } from '../../core/clock/tempo-map'
 import type { NoteEvent } from '../../core/model/note'
 import { metronomeClicks, type ClickEvent } from '../../core/synthesis/metronome'
 import { referenceTriggers } from '../../core/synthesis/reference'
@@ -16,6 +18,8 @@ import { WebSynth } from './web-synth'
 const LOOKAHEAD_MS = 25
 const HORIZON_S = 0.1
 const START_DELAY_S = 0.08
+/** Tempo segments that ended this long ago are forgotten. */
+const HISTORY_S = 2
 
 export interface TransportOptions {
   readonly grid: BeatGrid
@@ -31,7 +35,7 @@ export class WebTransport {
   private readonly context: AudioContext
   private timer: number | null = null
   private cursor = 0
-  private grid: BeatGrid | undefined
+  private map: TempoMap | undefined
   private clicks = false
   private notes: readonly NoteEvent[] = []
   private onClick: ((event: ClickEvent) => void) | undefined
@@ -54,7 +58,9 @@ export class WebTransport {
   async start(options: TransportOptions): Promise<void> {
     this.stop()
     if (this.context.state !== 'running') await this.context.resume()
-    this.grid = options.grid
+    // Another start() may have finished while this one waited for the context.
+    this.stop()
+    this.map = new TempoMap(options.grid)
     this.clicks = options.metronome !== false
     this.notes = options.notes ?? []
     this.onClick = options.onClick
@@ -65,32 +71,53 @@ export class WebTransport {
     this.timer = window.setInterval(() => this.tick(), LOOKAHEAD_MS)
   }
 
+  /**
+   * Change tempo and/or meter without stopping. Lands on the first beat not yet scheduled; returns
+   * that moment on the audio clock, or `undefined` if nothing changes or the transport is stopped.
+   * A meter change restarts bar numbering there (and a reference melody with it).
+   */
+  retime(change: GridChange): number | undefined {
+    const at = this.map?.change(this.cursor, change)
+    return at === undefined ? undefined : this.audioOrigin + at
+  }
+
+  /** Musical position at an `AudioContext` time, or `undefined` when stopped. */
+  positionAt(contextTime: number): MapPosition | undefined {
+    return this.map?.positionAt(contextTime - this.audioOrigin)
+  }
+
   stop(): void {
     if (this.timer !== null) {
       window.clearInterval(this.timer)
       this.timer = null
     }
     this.synth.stop()
-    this.grid = undefined
+    this.map = undefined
   }
 
   private tick(): void {
-    if (this.grid === undefined) return
-    const to = this.context.currentTime + HORIZON_S - this.audioOrigin
+    if (this.map === undefined) return
+    const now = this.context.currentTime - this.audioOrigin
+    const to = now + HORIZON_S
     if (to <= this.cursor) return
-    const from = this.cursor
+    for (const span of this.map.windows(this.cursor, to))
+      this.schedule(span.grid, span.from, span.to)
     this.cursor = to
+    this.map.prune(now - HISTORY_S)
+  }
+
+  private schedule(grid: BeatGrid, from: number, to: number): void {
     if (this.clicks) {
-      for (const click of metronomeClicks(this.grid, from, to)) {
-        this.synth.click(this.audioOrigin + click.time, click.accent)
+      for (const click of metronomeClicks(grid, from, to)) {
+        this.synth.click(this.audioOrigin + click.time, click.level)
         this.scheduled.push(click)
         this.onClick?.(click)
       }
     }
     if (this.notes.length > 0) {
-      for (const trigger of referenceTriggers(this.grid, this.notes, from, to)) {
+      for (const trigger of referenceTriggers(grid, this.notes, from, to)) {
         if (trigger.kind !== 'on') continue
-        const duration = this.grid.secondsPerBeat * trigger.note.durationBeats
+        const duration = grid.secondsPerBeat * trigger.note.durationBeats
         this.synth.note(
           this.audioOrigin + trigger.time,
           trigger.note.midi,
