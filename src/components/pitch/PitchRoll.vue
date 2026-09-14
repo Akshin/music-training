@@ -2,7 +2,7 @@
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { loudnessColorTable } from '@/components/loudness'
 import { noteName } from '@/training/keys'
-import type { PitchTarget, PitchTrace } from './trace'
+import { placeSegments, slideEase, type PitchTarget, type PitchTrace } from './trace'
 
 const props = withDefaults(
   defineProps<{
@@ -16,7 +16,7 @@ const props = withDefaults(
     seconds?: number
     /** Seconds right of now, where upcoming targets come in. */
     ahead?: number
-    /** Notes on the trace clock: alike blocks on their lanes, behind the band. */
+    /** Notes on the trace clock, behind the band, shaped by their segments: hold, staccato, slide. */
     targets?: readonly PitchTarget[]
     /**
      * Now on the trace clock while there are no frames to take it from (the microphone is off), so
@@ -52,6 +52,8 @@ const MAX_THICKNESS = 12
 const LABEL_ALL_LANE = 11
 const LABEL_NATURALS_LANE = 7
 const BLACK_KEYS = new Set([1, 3, 6, 8, 10])
+/** A slide's curve is traced in steps no wider than this, px. */
+const SLIDE_STEP = 3
 
 type Side = 'above' | 'below'
 type Naming = 'all' | 'naturals' | 'octaves'
@@ -170,6 +172,182 @@ function drawEdgeCue(
   context.shadowBlur = 0
 }
 
+/** Scratch canvases for one note: its body, and the one-pixel ring around it. */
+let bodyLayer: HTMLCanvasElement | null = null
+let ringLayer: HTMLCanvasElement | null = null
+
+/** A scratch canvas sized like the chart's canvas. */
+function scratch(layer: HTMLCanvasElement | null): HTMLCanvasElement {
+  const element = layer ?? document.createElement('canvas')
+  const pixelWidth = Math.round(width * ratio)
+  const pixelHeight = Math.round(height * ratio)
+  if (element.width !== pixelWidth) element.width = pixelWidth
+  if (element.height !== pixelHeight) element.height = pixelHeight
+  return element
+}
+
+/**
+ * Draws a note as one shape, whatever its segments. Holds and slides run as one round-joined
+ * stroke along the centre line, so a slide of any steepness keeps its width and its bends come
+ * out smooth on the outside and clean on the inside; a staccato is a triangle growing from a
+ * point. The note's ends are level (every segment starts and ends flat), so they get the block's
+ * rounded corners, except where a staccato's tip or base is.
+ *
+ * The outline follows the whole shape, not its pieces: the shape is drawn a pixel bigger on a
+ * scratch canvas and the shape itself is cut out of that, leaving a ring with no seams inside.
+ */
+function drawNote(
+  context: CanvasRenderingContext2D,
+  target: PitchTarget,
+  xOfTime: (seconds: number) => number,
+  yOf: (midi: number) => number,
+  blockHeight: number,
+  low: number,
+  high: number,
+): void {
+  const parts = placeSegments(target).filter((part) => part.end > part.start)
+  const first = parts[0]
+  const last = parts.at(-1)
+  if (first === undefined || last === undefined) return
+  const notes = parts.flatMap((part) => [Math.round(part.from), Math.round(part.to)])
+  if (Math.max(...notes) < low || Math.min(...notes) > high) return
+  const left = xOfTime(first.start)
+  const right = xOfTime(last.end)
+  if (right <= left || right <= GUTTER || left >= width) return
+
+  const body = blockHeight - 1
+  // The stroke has round ends, so where a slide meets a staccato steeply the join stays smooth. At
+  // the note's ends it stops half a body short, so its round tip ends on time; a level hold end
+  // gets the block's corners from a cap over it, a slide end stays round.
+  const inset = Math.min(body / 2, (right - left) / 2)
+  const radius = Math.min(blockHeight * 0.4, inset)
+  const capLeft = first.segment.kind === 'hold'
+  const capRight = last.segment.kind === 'hold'
+  const strokeLeft = first.segment.kind === 'staccato' ? left : left + inset
+  const strokeRight = last.segment.kind === 'staccato' ? right : right - inset
+  /** A note shorter than its thickness has no room for round stroke ends; its caps draw it. */
+  const stroked = inset >= body / 2
+
+  /** The note's shape, `grow` px bigger all round. */
+  const shape = (layer: CanvasRenderingContext2D, grow: number) => {
+    let run: { x: number; y: number }[] = []
+    const flush = () => {
+      if (stroked && run.length >= 2) {
+        layer.beginPath()
+        for (const point of run) layer.lineTo(point.x, point.y)
+        layer.lineWidth = body + grow * 2
+        layer.stroke()
+      }
+      run = []
+    }
+    for (const part of parts) {
+      const x0 = xOfTime(part.start)
+      const x1 = xOfTime(part.end)
+      const y0 = yOf(Math.round(part.from))
+      const y1 = yOf(Math.round(part.to))
+      if (part.segment.kind === 'staccato') {
+        flush()
+        layer.beginPath()
+        layer.moveTo(x0, y0)
+        layer.lineTo(x1, y0 - body / 2)
+        layer.lineTo(x1, y0 + body / 2)
+        layer.closePath()
+        layer.fill()
+        if (grow > 0) {
+          layer.lineWidth = grow * 2
+          layer.stroke()
+        }
+        continue
+      }
+      const a = Math.max(x0, strokeLeft)
+      const b = Math.min(x1, strokeRight)
+      if (b <= a) continue
+      // A slide at the note's end glides over the stroke that is left, so it lands level on its
+      // lane before the round tip instead of arriving steep: half a body early, for a clean end.
+      const slide = part.segment.kind === 'slide'
+      const steps = slide ? Math.max(1, Math.ceil((b - a + Math.abs(y1 - y0)) / SLIDE_STEP)) : 1
+      for (let i = 0; i <= steps; i++) {
+        const x = a + ((b - a) * i) / steps
+        const y = slide ? y0 + (y1 - y0) * slideEase(i / steps) : y0
+        run.push({ x, y })
+      }
+    }
+    flush()
+    const cap = (x: number, y: number) => {
+      layer.beginPath()
+      layer.roundRect(x, y - body / 2, inset * 2, body, radius)
+      layer.fill()
+      if (grow > 0) {
+        layer.lineWidth = grow * 2
+        layer.stroke()
+      }
+    }
+    if (capLeft) cap(left, yOf(Math.round(first.from)))
+    if (capRight) cap(right - inset * 2, yOf(Math.round(last.to)))
+  }
+
+  // Only the note's box is cleared and copied, in canvas pixels.
+  const ys = parts.flatMap((part) => [yOf(Math.round(part.from)), yOf(Math.round(part.to))])
+  const boxLeft = Math.floor(Math.max(0, left - 2) * ratio)
+  const boxTop = Math.floor(Math.max(0, Math.min(...ys) - blockHeight) * ratio)
+  const boxRight = Math.ceil(Math.min(width, right + 2) * ratio)
+  const boxBottom = Math.ceil(Math.min(height, Math.max(...ys) + blockHeight) * ratio)
+  if (boxRight <= boxLeft || boxBottom <= boxTop) return
+  const boxWidth = boxRight - boxLeft
+  const boxHeight = boxBottom - boxTop
+
+  bodyLayer = scratch(bodyLayer)
+  ringLayer = scratch(ringLayer)
+  const bodyContext = bodyLayer.getContext('2d')
+  const ringContext = ringLayer.getContext('2d')
+  if (bodyContext === null || ringContext === null) return
+  for (const [layer, grow] of [
+    [bodyContext, 0],
+    [ringContext, 1],
+  ] as const) {
+    layer.setTransform(1, 0, 0, 1, 0, 0)
+    layer.globalCompositeOperation = 'source-over'
+    layer.clearRect(boxLeft, boxTop, boxWidth, boxHeight)
+    layer.setTransform(ratio, 0, 0, ratio, 0, 0)
+    layer.fillStyle = palette.ink
+    layer.strokeStyle = palette.ink
+    layer.lineJoin = 'round'
+    layer.lineCap = 'round'
+    shape(layer, grow)
+  }
+  ringContext.setTransform(1, 0, 0, 1, 0, 0)
+  ringContext.globalCompositeOperation = 'destination-out'
+  ringContext.drawImage(
+    bodyLayer,
+    boxLeft,
+    boxTop,
+    boxWidth,
+    boxHeight,
+    boxLeft,
+    boxTop,
+    boxWidth,
+    boxHeight,
+  )
+  ringContext.globalCompositeOperation = 'source-over'
+
+  const copy = (layer: HTMLCanvasElement, alpha: number) => {
+    context.globalAlpha = alpha
+    context.drawImage(
+      layer,
+      boxLeft,
+      boxTop,
+      boxWidth,
+      boxHeight,
+      boxLeft / ratio,
+      boxTop / ratio,
+      boxWidth / ratio,
+      boxHeight / ratio,
+    )
+  }
+  copy(bodyLayer, 0.16)
+  copy(ringLayer, 0.35)
+}
+
 function draw(): void {
   const context = canvas.value?.getContext('2d')
   if (context === undefined || context === null || width === 0 || height === 0) return
@@ -208,33 +386,20 @@ function draw(): void {
   context.globalAlpha = 1
   context.clearRect(0, 0, width, height)
 
-  // Notes first, so the band draws over them: blocks centred on their lanes, all alike. They are
-  // placed on the trace clock, so they need a now to hang from.
+  // Notes first, so the band draws over them, centred on their lanes and alike in colour; their
+  // segments set the shape: a block for a hold, a triangle for a staccato, a ribbon for a slide,
+  // joined into one outline. They are placed on the trace clock, so they need a now to hang from.
   if (now !== undefined) {
     const xOfTime = (seconds: number) => nowX - (now - seconds) * perSecond
     const blockHeight = Math.min(lane * 0.76, thickness + 10)
+    context.save()
+    context.beginPath()
+    context.rect(GUTTER, 0, width - GUTTER, height)
+    context.clip()
     for (const target of props.targets) {
-      const note = Math.round(target.midi)
-      if (note < low || note > high) continue
-      const from = Math.max(GUTTER, xOfTime(target.start))
-      const to = Math.min(width, xOfTime(target.end))
-      if (to <= from) continue
-      context.beginPath()
-      context.roundRect(
-        from,
-        yOf(note) - blockHeight / 2,
-        to - from,
-        blockHeight,
-        blockHeight * 0.4,
-      )
-      context.globalAlpha = 0.16
-      context.fillStyle = palette.ink
-      context.fill()
-      context.globalAlpha = 0.35
-      context.strokeStyle = palette.ink
-      context.lineWidth = 1
-      context.stroke()
+      drawNote(context, target, xOfTime, yOf, blockHeight, low, high)
     }
+    context.restore()
   }
 
   // The sung band: one round-capped stroke per frame, coloured by its loudness. Stretches outside

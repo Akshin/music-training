@@ -2,7 +2,7 @@
 import { onBeforeUnmount, ref, shallowRef } from 'vue'
 import { PhMicrophone, PhMicrophoneSlash, PhMusicNotes } from '@phosphor-icons/vue'
 import PitchRoll from '@/components/pitch/PitchRoll.vue'
-import type { PitchTarget } from '@/components/pitch/trace'
+import { targetEnd, type PitchSegment, type PitchTarget } from '@/components/pitch/trace'
 import VolumeBar from '@/components/volume/VolumeBar.vue'
 import VolumeCapsule from '@/components/volume/VolumeCapsule.vue'
 import VolumeSegments from '@/components/volume/VolumeSegments.vue'
@@ -47,6 +47,32 @@ let previewClock: 'voice' | 'lab' | null = null
 let labClockOrigin = 0
 let nextStart = 0
 
+/** Note shapes the preview picks from: single segments and the ways they combine. */
+function previewSegments(midi: number, low: number, high: number): PitchSegment[] {
+  const between = (min: number, max: number) => min + Math.random() * (max - min)
+  // A slide by up to a fifth either way, kept inside the range.
+  const step = (1 + Math.floor(Math.random() * 7)) * (Math.random() < 0.5 ? -1 : 1)
+  const to = Math.min(high, Math.max(low, midi + step))
+  const shapes: PitchSegment[][] = [
+    [{ kind: 'hold', duration: between(0.5, 1.3) }],
+    [{ kind: 'staccato', duration: between(0.25, 0.4) }],
+    [
+      { kind: 'staccato', duration: between(0.12, 0.2) },
+      { kind: 'hold', duration: between(0.4, 0.8) },
+    ],
+    [
+      { kind: 'hold', duration: between(0.4, 0.8) },
+      { kind: 'slide', to, duration: between(0.3, 0.6) },
+    ],
+    [
+      { kind: 'staccato', duration: between(0.12, 0.2) },
+      { kind: 'slide', to, duration: between(0.3, 0.6) },
+      { kind: 'hold', duration: between(0.3, 0.7) },
+    ],
+  ]
+  return shapes[Math.floor(Math.random() * shapes.length)]!
+}
+
 function previewTick(): void {
   const trace = pitch.value
   const clock = trace.length > 0 ? 'voice' : 'lab'
@@ -59,20 +85,18 @@ function previewTick(): void {
   }
   previewNow.value = clock === 'lab' ? now : undefined
 
-  let targets = previewTargets.value.filter((target) => target.end > now - PREVIEW_KEEP)
+  let targets = previewTargets.value.filter((target) => targetEnd(target) > now - PREVIEW_KEEP)
   let changed = targets.length !== previewTargets.value.length
   while (nextStart < now + PREVIEW_AHEAD + 1) {
     const { low, high } = pitchRange.value
-    const length = 0.5 + Math.random() * 0.8
-    targets = [
-      ...targets,
-      {
-        midi: low + Math.floor(Math.random() * (high - low + 1)),
-        start: nextStart,
-        end: nextStart + length,
-      },
-    ]
-    nextStart += length + 0.15 + Math.random() * 0.4
+    const midi = low + Math.floor(Math.random() * (high - low + 1))
+    const target: PitchTarget = {
+      midi,
+      start: nextStart,
+      segments: previewSegments(midi, low, high),
+    }
+    targets = [...targets, target]
+    nextStart = targetEnd(target) + 0.15 + Math.random() * 0.4
     changed = true
   }
   if (changed) previewTargets.value = targets

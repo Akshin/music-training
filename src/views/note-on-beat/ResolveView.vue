@@ -4,7 +4,7 @@ import type { MapPosition, NoteEvent } from '@audio-core/core/index'
 import ExerciseConsole from '@/components/exercise/ExerciseConsole.vue'
 import ExerciseScreen from '@/components/exercise/ExerciseScreen.vue'
 import PitchRoll from '@/components/pitch/PitchRoll.vue'
-import type { PitchTarget } from '@/components/pitch/trace'
+import { heldNote, type PitchTarget } from '@/components/pitch/trace'
 import { useExercise } from '@/composables/useExercise'
 import { NOTE_ON_BEAT } from '@/training/exercises'
 import { noteName } from '@/training/keys'
@@ -137,7 +137,7 @@ const targets = computed<PitchTarget[]>(() => {
     const beat = singBeat(index, beatsPerBar.value)
     const start = session.traceTimeOf(at.grid.beatToSeconds(beat))
     const end = session.traceTimeOf(at.grid.beatToSeconds(beat + NOTE_BEATS))
-    if (start !== null && end !== null) list.push({ midi: noteOf(index), start, end })
+    if (start !== null && end !== null) list.push(heldNote(noteOf(index), start, end))
   }
   return list
 })
