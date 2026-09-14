@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { loudnessColorTable } from '@/components/loudness'
 import { noteName } from '@/training/keys'
 import type { PitchTarget, PitchTrace } from './trace'
@@ -16,14 +16,20 @@ const props = withDefaults(
     seconds?: number
     /** Seconds right of now, where upcoming targets come in. */
     ahead?: number
-    /** Notes to sing, on the trace clock: quiet blocks on their lanes, behind the band. */
+    /** Notes on the trace clock: alike blocks on their lanes, behind the band. */
     targets?: readonly PitchTarget[]
+    /**
+     * Now on the trace clock while there are no frames to take it from (the microphone is off), so
+     * targets can still move. With frames, the newest frame is now.
+     */
+    now?: number
     label?: string
   }>(),
   {
     seconds: 6,
     ahead: 0,
     targets: () => [],
+    now: undefined,
     label: 'Высота звука во времени',
   },
 )
@@ -39,15 +45,19 @@ const CURRENT_HOLD_SECONDS = 0.15
 /** Frames above or below the range run along that edge as a thin rail, px from the edge. */
 const RAIL_INSET = 2
 const RAIL_WIDTH = 2
+/** Band thickness, px: still readable on a wide range, not bloated on a narrow one. */
+const MIN_THICKNESS = 3
+const MAX_THICKNESS = 12
+/** Lane height from which every note is named, and from which the naturals still are, px. */
+const LABEL_ALL_LANE = 11
+const LABEL_NATURALS_LANE = 7
 const BLACK_KEYS = new Set([1, 3, 6, 8, 10])
 
 type Side = 'above' | 'below'
+type Naming = 'all' | 'naturals' | 'octaves'
 
 const root = ref<HTMLDivElement | null>(null)
 const canvas = ref<HTMLCanvasElement | null>(null)
-
-/** One lane per note; the chart grows with the range so every note name stays readable. */
-const laneCount = computed(() => Math.abs(Math.round(props.high) - Math.round(props.low)) + 1)
 
 const palette = { ink: '#eceae4', muted: '#9aa0a8', font: 'sans-serif' }
 /** Loudness colours from silence to full, resolved from the theme for canvas. */
@@ -110,6 +120,13 @@ function currentNote(trace: PitchTrace): { note: number; level: number } | null 
   return null
 }
 
+/** Which notes get a name, from how much room a lane has. */
+function namingFor(lane: number): Naming {
+  if (lane >= LABEL_ALL_LANE) return 'all'
+  if (lane >= LABEL_NATURALS_LANE) return 'naturals'
+  return 'octaves'
+}
+
 /**
  * The sung note is off the chart: a soft glow hugging that edge around the head of the band and a
  * small chevron pointing the way.
@@ -157,10 +174,12 @@ function draw(): void {
   const context = canvas.value?.getContext('2d')
   if (context === undefined || context === null || width === 0 || height === 0) return
 
+  // The note axis is flexible: the range shares the chart's height, so a narrow range gets wide
+  // lanes and a wide one gets tight lanes, and everything below scales from the lane.
   const low = Math.round(Math.min(props.low, props.high))
   const high = Math.round(Math.max(props.low, props.high))
   const lane = height / (high - low + 1)
-  const thickness = Math.max(3, lane * 0.55)
+  const thickness = Math.min(MAX_THICKNESS, Math.max(MIN_THICKNESS, lane * 0.55))
   const right = width - HEAD_ROOM
   const plotWidth = Math.max(0, right - GUTTER)
   const ahead = Math.max(0, props.ahead)
@@ -168,9 +187,10 @@ function draw(): void {
   /** Where the newest frame sits; the chart right of it is the future. */
   const nowX = GUTTER + props.seconds * perSecond
   const { trace } = props
+  /** Now on the trace clock: the newest frame, or `now` from outside when there are no frames. */
+  const now = trace.length > 0 ? trace.endTime : props.now
   const frames = Math.max(1, props.seconds * trace.frameRate)
   const yOf = (midi: number) => (high + 0.5 - midi) * lane
-  const xOfTime = (seconds: number) => nowX - (trace.endTime - seconds) * perSecond
   const xOf = (index: number) => nowX - ((trace.length - 1 - index) / trace.frameRate) * perSecond
   /** Rail height for a frame outside the range, or null inside it. */
   const railOf = (midi: number): number | null => {
@@ -188,33 +208,32 @@ function draw(): void {
   context.globalAlpha = 1
   context.clearRect(0, 0, width, height)
 
-  // Targets first, so the band draws over them: quiet blocks on their lanes, outlined when they
-  // are notes to sing. They are placed on the trace clock, so they need frames to hang from.
-  if (trace.length > 0) {
+  // Notes first, so the band draws over them: blocks centred on their lanes, all alike. They are
+  // placed on the trace clock, so they need a now to hang from.
+  if (now !== undefined) {
+    const xOfTime = (seconds: number) => nowX - (now - seconds) * perSecond
+    const blockHeight = Math.min(lane * 0.76, thickness + 10)
     for (const target of props.targets) {
       const note = Math.round(target.midi)
       if (note < low || note > high) continue
       const from = Math.max(GUTTER, xOfTime(target.start))
       const to = Math.min(width, xOfTime(target.end))
       if (to <= from) continue
-      const strong = target.strong === true
       context.beginPath()
       context.roundRect(
         from,
-        (high - note) * lane + lane * 0.12,
+        yOf(note) - blockHeight / 2,
         to - from,
-        lane * 0.76,
-        lane * 0.3,
+        blockHeight,
+        blockHeight * 0.4,
       )
-      context.globalAlpha = strong ? 0.18 : 0.08
+      context.globalAlpha = 0.16
       context.fillStyle = palette.ink
       context.fill()
-      if (strong) {
-        context.globalAlpha = 0.4
-        context.strokeStyle = palette.ink
-        context.lineWidth = 1
-        context.stroke()
-      }
+      context.globalAlpha = 0.35
+      context.strokeStyle = palette.ink
+      context.lineWidth = 1
+      context.stroke()
     }
   }
 
@@ -280,17 +299,42 @@ function draw(): void {
     }
   }
 
-  // Every lane is named: naturals plainly, sharps quieter, the sung note in its loudness colour.
+  // Note names thin out as the lanes get tight — every note, then the naturals, then only the Cs —
+  // and never overlap: the sung note is placed first (in its loudness colour), then the Cs as
+  // anchors, then the rest wherever they still fit.
   context.globalCompositeOperation = 'source-over'
   context.textBaseline = 'middle'
-  const fontSize = Math.min(11, Math.max(8, lane * 0.72))
+  const naming = namingFor(lane)
+  const fontSize = Math.min(11, Math.max(8, lane * 0.8))
+  const minGap = fontSize + 2
+  const candidates: number[] = []
   for (let note = low; note <= high; note++) {
+    const pitchClass = ((note % 12) + 12) % 12
+    if (
+      naming === 'all' ||
+      pitchClass === 0 ||
+      (naming === 'naturals' && !BLACK_KEYS.has(pitchClass))
+    )
+      candidates.push(note)
+  }
+  const rank = (note: number) => (note === sung?.note ? 0 : ((note % 12) + 12) % 12 === 0 ? 1 : 2)
+  const ordered = [
+    ...new Set([
+      ...(sung !== null && sung.note >= low && sung.note <= high ? [sung.note] : []),
+      ...candidates,
+    ]),
+  ].sort((a, b) => rank(a) - rank(b) || a - b)
+  const placed: number[] = []
+  for (const note of ordered) {
+    const y = yOf(note)
     const isSung = note === sung?.note
+    if (!isSung && placed.some((other) => Math.abs(other - y) < minGap)) continue
+    placed.push(y)
     const isSharp = BLACK_KEYS.has(((note % 12) + 12) % 12)
     context.font = `${isSung ? 700 : 500} ${fontSize}px ${palette.font}`
     context.globalAlpha = isSung ? 1 : isSharp ? 0.38 : 0.7
     context.fillStyle = isSung ? sungColor : palette.muted
-    context.fillText(noteName(note), 2, (high - note + 0.5) * lane)
+    context.fillText(noteName(note), 2, y)
   }
 
   // With room for the future, a hairline marks now.
@@ -327,20 +371,25 @@ onBeforeUnmount(() => {
   colorScheme.removeEventListener('change', onSchemeChange)
 })
 
-watch(() => [props.trace, props.targets, props.low, props.high, props.seconds, props.ahead], draw)
+watch(
+  () => [props.trace, props.targets, props.low, props.high, props.seconds, props.ahead, props.now],
+  draw,
+)
 </script>
 
 <template>
-  <div ref="root" class="roll" role="img" :aria-label="label" :style="{ '--lanes': laneCount }">
+  <div ref="root" class="roll" role="img" :aria-label="label">
     <canvas ref="canvas" class="roll__canvas" />
   </div>
 </template>
 
 <style scoped>
+/* The chart's height is set from outside (class, style or a stretching parent); the note range
+   shares it. */
 .roll {
   width: 100%;
-  height: calc(var(--lanes) * 0.875rem);
-  min-height: 8rem;
+  height: 20rem;
+  min-height: 6rem;
 }
 
 .roll__canvas {

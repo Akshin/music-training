@@ -12,14 +12,12 @@ export interface PitchTrace {
   readonly endTime: number
 }
 
-/** A note to sing, placed on the same clock as the trace frames. */
+/** A note on the chart, placed on the same clock as the trace frames. */
 export interface PitchTarget {
   readonly midi: number
   /** Start and end, seconds on the trace clock. */
   readonly start: number
   readonly end: number
-  /** Drawn stronger: a note to sing rather than one to listen to. */
-  readonly strong?: boolean
 }
 
 export const EMPTY_PITCH_TRACE: PitchTrace = {

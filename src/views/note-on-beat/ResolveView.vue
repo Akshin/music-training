@@ -128,22 +128,16 @@ watch([cycle, epoch], ([next, nextEpoch], [previous, previousEpoch]) => {
   timers.add(timer)
 })
 
-/** Notes around now on the chart: listening notes faint, notes to sing strong. */
+/** Notes to sing around now on the chart; the reference note is heard, not drawn. */
 const targets = computed<PitchTarget[]>(() => {
   const at = position.value
   if (at === null || micState.value !== 'running') return []
   const list: PitchTarget[] = []
   for (let index = Math.max(0, cycle.value - 1); index <= cycle.value + 1; index++) {
-    const midi = noteOf(index)
-    const beatsInBar = beatsPerBar.value
-    for (const [beat, strong] of [
-      [listenBeat(index, beatsInBar), false],
-      [singBeat(index, beatsInBar), true],
-    ] as const) {
-      const start = session.traceTimeOf(at.grid.beatToSeconds(beat))
-      const end = session.traceTimeOf(at.grid.beatToSeconds(beat + NOTE_BEATS))
-      if (start !== null && end !== null) list.push({ midi, start, end, strong })
-    }
+    const beat = singBeat(index, beatsPerBar.value)
+    const start = session.traceTimeOf(at.grid.beatToSeconds(beat))
+    const end = session.traceTimeOf(at.grid.beatToSeconds(beat + NOTE_BEATS))
+    if (start !== null && end !== null) list.push({ midi: noteOf(index), start, end })
   }
   return list
 })

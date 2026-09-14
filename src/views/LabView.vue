@@ -1,6 +1,8 @@
 <script setup lang="ts">
-import { PhMicrophone, PhMicrophoneSlash } from '@phosphor-icons/vue'
+import { onBeforeUnmount, ref, shallowRef } from 'vue'
+import { PhMicrophone, PhMicrophoneSlash, PhMusicNotes } from '@phosphor-icons/vue'
 import PitchRoll from '@/components/pitch/PitchRoll.vue'
+import type { PitchTarget } from '@/components/pitch/trace'
 import VolumeBar from '@/components/volume/VolumeBar.vue'
 import VolumeCapsule from '@/components/volume/VolumeCapsule.vue'
 import VolumeSegments from '@/components/volume/VolumeSegments.vue'
@@ -13,9 +15,84 @@ import { SANDBOX } from '@/training/exercises'
 const exercise = useExercise(SANDBOX)
 const { level, pitch, micState: state, error, startListening, stopListening } = exercise.session
 
-/** C4–C5: one octave. */
-const PITCH_LOW = 60
-const PITCH_HIGH = 72
+/** Ranges to try the flexible note axis with, from a fifth to three octaves. */
+const PITCH_RANGES = [
+  { label: 'Квинта', low: 60, high: 67 },
+  { label: 'Октава', low: 60, high: 72 },
+  { label: 'Две октавы', low: 48, high: 72 },
+  { label: 'Три октавы', low: 48, high: 84 },
+] as const
+
+type PitchRange = (typeof PITCH_RANGES)[number]
+
+const pitchRange = ref<PitchRange>(PITCH_RANGES[1])
+
+/**
+ * Seconds of upcoming notes shown while the preview runs — the same as the chart's history (its
+ * default 6 s), so now sits in the middle.
+ */
+const PREVIEW_AHEAD = 6
+/** Notes older than this many seconds are dropped from the preview. */
+const PREVIEW_KEEP = 8
+
+// A preview of how target notes look on the chart: random notes from the chosen range scroll in
+// from the right. It only exercises the drawing; no exercise logic is behind it. With the
+// microphone on, the notes run on the voice's clock so the voice can be seen against them; with
+// it off, the lab keeps its own clock and hands it to the chart as `now`.
+const previewOn = ref(false)
+const previewTargets = shallowRef<PitchTarget[]>([])
+const previewNow = ref<number | undefined>(undefined)
+let previewRaf = 0
+let previewClock: 'voice' | 'lab' | null = null
+let labClockOrigin = 0
+let nextStart = 0
+
+function previewTick(): void {
+  const trace = pitch.value
+  const clock = trace.length > 0 ? 'voice' : 'lab'
+  const now = clock === 'voice' ? trace.endTime : (performance.now() - labClockOrigin) / 1000
+  if (clock !== previewClock) {
+    // The clocks do not line up, so a switch starts the stream over.
+    previewClock = clock
+    previewTargets.value = []
+    nextStart = now + 0.5
+  }
+  previewNow.value = clock === 'lab' ? now : undefined
+
+  let targets = previewTargets.value.filter((target) => target.end > now - PREVIEW_KEEP)
+  let changed = targets.length !== previewTargets.value.length
+  while (nextStart < now + PREVIEW_AHEAD + 1) {
+    const { low, high } = pitchRange.value
+    const length = 0.5 + Math.random() * 0.8
+    targets = [
+      ...targets,
+      {
+        midi: low + Math.floor(Math.random() * (high - low + 1)),
+        start: nextStart,
+        end: nextStart + length,
+      },
+    ]
+    nextStart += length + 0.15 + Math.random() * 0.4
+    changed = true
+  }
+  if (changed) previewTargets.value = targets
+  previewRaf = requestAnimationFrame(previewTick)
+}
+
+function togglePreview(): void {
+  cancelAnimationFrame(previewRaf)
+  previewOn.value = !previewOn.value
+  previewTargets.value = []
+  previewNow.value = undefined
+  previewClock = null
+  if (!previewOn.value) return
+  labClockOrigin = performance.now()
+  previewRaf = requestAnimationFrame(previewTick)
+}
+
+onBeforeUnmount(() => {
+  cancelAnimationFrame(previewRaf)
+})
 
 function toggleMic(): void {
   if (state.value === 'running') void stopListening()
@@ -80,7 +157,40 @@ function toggleMic(): void {
       <h2 id="category-pitch" class="category__title">Высота</h2>
       <ul class="specimens">
         <li class="specimen specimen--wide">
-          <PitchRoll :trace="pitch" :low="PITCH_LOW" :high="PITCH_HIGH" />
+          <div class="pitch-tools">
+            <div class="ranges" role="radiogroup" aria-label="Диапазон нот">
+              <button
+                v-for="range in PITCH_RANGES"
+                :key="range.label"
+                type="button"
+                role="radio"
+                class="ranges__opt"
+                :class="{ 'ranges__opt--on': range.label === pitchRange.label }"
+                :aria-checked="range.label === pitchRange.label"
+                @click="pitchRange = range"
+              >
+                {{ range.label }}
+              </button>
+            </div>
+            <button
+              type="button"
+              class="preview"
+              :class="{ 'preview--on': previewOn }"
+              :aria-pressed="previewOn"
+              @click="togglePreview"
+            >
+              <PhMusicNotes :size="16" weight="light" aria-hidden="true" />
+              {{ previewOn ? 'Остановить ноты' : 'Пустить ноты' }}
+            </button>
+          </div>
+          <PitchRoll
+            :trace="pitch"
+            :low="pitchRange.low"
+            :high="pitchRange.high"
+            :targets="previewTargets"
+            :ahead="previewOn ? PREVIEW_AHEAD : 0"
+            :now="previewNow"
+          />
         </li>
       </ul>
     </section>
@@ -230,6 +340,88 @@ function toggleMic(): void {
 .specimen__name {
   font-size: 0.78rem;
   color: var(--muted);
+}
+
+.pitch-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.ranges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  padding: 0.3rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--bg-inset) 62%, transparent);
+}
+
+.ranges__opt {
+  height: 2.1rem;
+  padding: 0 0.9rem;
+  border: 1px solid transparent;
+  border-radius: var(--radius-pill);
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background 280ms var(--ease),
+    color 280ms var(--ease);
+}
+
+.ranges__opt:hover {
+  color: var(--ink);
+}
+
+.ranges__opt:focus-visible,
+.preview:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.ranges__opt--on {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+.ranges__opt--on:hover {
+  color: var(--accent-ink);
+}
+
+.preview {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  height: 2.8rem;
+  padding: 0 1.1rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--bg-inset) 62%, transparent);
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    border-color 280ms var(--ease),
+    background 280ms var(--ease),
+    color 280ms var(--ease);
+}
+
+.preview:hover {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+}
+
+.preview--on {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-ink);
 }
 
 .category__note {
