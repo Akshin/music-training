@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { PhMetronome, PhRepeat, PhSpeakerHigh, PhWaveform } from '@phosphor-icons/vue'
-import BpmControl from '@/components/BpmControl.vue'
+import BpmControl from '@/components/controls/BpmControl.vue'
 import ControlSheet from '@/components/exercise/ControlSheet.vue'
-import IconSwitch from '@/components/IconSwitch.vue'
-import KeyControl from '@/components/KeyControl.vue'
-import PlayTransport from '@/components/PlayTransport.vue'
-import TimeSignatureControl from '@/components/TimeSignatureControl.vue'
+import IconSwitch from '@/components/controls/IconSwitch.vue'
+import KeyControl from '@/components/controls/KeyControl.vue'
+import PlayTransport from '@/components/controls/PlayTransport.vue'
+import TimeSignatureControl from '@/components/controls/TimeSignatureControl.vue'
 import type { Exercise } from '@/composables/useExercise'
 
 const props = withDefaults(

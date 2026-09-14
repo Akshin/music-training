@@ -22,10 +22,13 @@ src/
   views/tetrachord/  экраны тетрахордной тренировки (Issue/Resolve)
   views/note-on-beat/
                      экраны «Ноты на долю» (Issue/Resolve)
-  components/        UI-контролы и визуализации (BpmControl, TimeSignatureControl,
-                     SchemeCircle, TetrachordScheme, ModeScheme, IntervalScheme,
-                     TabHelper/PianoHelper, PlayTransport, TrainingStage, SiteNav,
-                     ModeBackdrop, IconSwitch, KeyControl)
+  components/        визуализации и сцены (SchemeCircle, TetrachordScheme,
+                     ModeScheme, IntervalScheme, TabHelper/PianoHelper,
+                     TrainingStage, SiteNav, ModeBackdrop)
+  components/controls/
+                     контролы консоли (BpmControl, TimeSignatureControl,
+                     KeyControl, IconSwitch, PlayTransport, SchemeChangeControl,
+                     TabInstrumentControl)
   components/exercise/
                      оболочка экрана тренировки: ExerciseScreen (раскладка),
                      ExerciseConsole (Ритм / [Упражнение] / Звук + Play) на
