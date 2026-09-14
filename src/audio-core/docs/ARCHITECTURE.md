@@ -393,6 +393,9 @@ Headless Chrome, `--use-file-for-fake-audio-capture` с WAV 220 Гц ±30 цен
   `WebTransport.retime` / `positionAt` / `setNotes` / `setMetronome`, FM-электропиано в
   `renderTone`, `WebLoop` для бэк-треков; метроном, мелодия и педаль в тетрахордной тренировке;
   186 тестов.
+- **Лаборатория** — стенд M2–M7 на `/lab` заменён песочницей UI-компонентов (2026-09-14); функции
+  движка остались в коде и тестах, сама песочница берёт громкость и высоту через `MicSource` +
+  `WorkerHost` (экстракторы `level` и `pitch` с pYIN, без записи PCM).
 
 ## Команды
 

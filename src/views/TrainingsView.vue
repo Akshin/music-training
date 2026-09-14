@@ -30,6 +30,22 @@ import { PhArrowUpRight, PhGuitar, PhWaveform } from '@phosphor-icons/vue'
         </RouterLink>
       </li>
       <li>
+        <RouterLink to="/note-on-beat/issue" class="card">
+          <span class="card__mark" aria-hidden="true">
+            <PhMicrophone :size="20" weight="light" />
+          </span>
+          <span class="card__body">
+            <span class="card__title">Нота на долю</span>
+            <span class="card__text">
+              Услышь ноту и спой её с сильной доли. Микрофон слушает высоту и время вступления.
+            </span>
+          </span>
+          <span class="card__icon" aria-hidden="true">
+            <PhArrowUpRight :size="16" weight="light" />
+          </span>
+        </RouterLink>
+      </li>
+      <li>
         <RouterLink to="/lab" class="card">
           <span class="card__mark" aria-hidden="true">
             <PhWaveform :size="20" weight="light" />
@@ -37,7 +53,7 @@ import { PhArrowUpRight, PhGuitar, PhWaveform } from '@phosphor-icons/vue'
           <span class="card__body">
             <span class="card__title">Лаборатория</span>
             <span class="card__text">
-              Живой разбор звука с микрофона: высота, громкость, спектр, ноты. Стенд движка.
+              Песочница: компоненты интерфейса на живом звуке с микрофона.
             </span>
           </span>
           <span class="card__icon" aria-hidden="true">

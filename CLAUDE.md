@@ -2,8 +2,8 @@
 
 Vue 3 + Vite тренажёр для музыкантов. Каждая тренировка — маршрут с двумя
 экранами: `/issue` (описание) и `/resolve` (прогон). Первая тренировка —
-тетрахорды (`/tetrachord-training`). Отдельный стенд `/lab` — живой анализ
-звука.
+тетрахорды (`/tetrachord-training`). `/lab` — песочница: компоненты на живых
+данных (громкость и высота голоса с микрофона), без моков.
 
 ## Стек
 
@@ -21,7 +21,10 @@ Vitest (тесты движка).
   (capture → analysis → scoring → synthesis), подключается как
   `@audio-core/*`; собственные архитектурные правила —
   `src/audio-core/docs/ARCHITECTURE.md`
-- `src/lab` — стенд для движка
+- `src/composables` — каркас упражнения: `useExerciseSession` (весь звук и
+  микрофон на одних аудиочасах), `useExercise` (общие настройки + сессия)
+- `src/components/exercise` — оболочка экрана тренировки (`ExerciseScreen`,
+  `ExerciseConsole` на выдвижной панели `ControlSheet`)
 
 Подробности: [docs/architecture.md](docs/architecture.md).
 Текущий статус: [docs/CURRENT.md](docs/CURRENT.md).

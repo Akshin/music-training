@@ -1,4 +1,4 @@
-/* z-index: mode backdrop 1, play chrome 2, grain 10, nav 20, skip 30 */
+/* z-index: mode backdrop 1, play chrome 2, grain 10, nav 20, control sheet 25–26, skip 30 */
 
 :root {
   color-scheme: dark;
@@ -14,6 +14,11 @@
   --accent: #d4b84a;
   --accent-ink: #1a1d14;
   --tonic: #8f3a48;
+  /* Loudness scale (src/components/loudness.ts): too quiet → practice level → too loud. */
+  --loudness-quiet: #8a8468;
+  --loudness-soft: #d4b84a;
+  --loudness-good: #4f9a62;
+  --loudness-loud: #a3394f;
   --shadow: rgb(8 10 14 / 42%);
   --radius-shell: 1.75rem;
   --radius-core: 1.375rem;
@@ -38,6 +43,10 @@
     --accent: #c4a62e;
     --accent-ink: #1a1d14;
     --tonic: #7a2836;
+    --loudness-quiet: #a19a7a;
+    --loudness-soft: #c4a62e;
+    --loudness-good: #3d7f4e;
+    --loudness-loud: #7a2836;
     --shadow: rgb(26 29 34 / 10%);
   }
 }

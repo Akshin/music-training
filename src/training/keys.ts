@@ -10,6 +10,12 @@ export function keyPitchClass(key: TonalKey): number {
   return TONAL_KEYS.indexOf(key)
 }
 
+/** Scientific pitch name of a MIDI note: 60 → C4, 61 → C#4. */
+export function noteName(midi: number): string {
+  const pitchClass = ((Math.round(midi) % 12) + 12) % 12
+  return `${TONAL_KEYS[pitchClass]}${Math.floor(Math.round(midi) / 12) - 1}`
+}
+
 /** MIDI tonic C4–B4, so a scale up to the octave still ends below C6. */
 export function keyTonicMidi(key: TonalKey): number {
   return 60 + keyPitchClass(key)

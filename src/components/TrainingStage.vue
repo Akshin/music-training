@@ -2,7 +2,7 @@
 import { computed, nextTick, onUnmounted, ref, shallowRef, watch } from 'vue'
 import type { MapPosition } from '@audio-core/core/clock/tempo-map'
 import ModeScheme from '@/components/ModeScheme.vue'
-import type { TrainingClock } from '@/composables/useTrainingSound'
+import type { TrainingClock } from '@/composables/useExerciseSession'
 import type { CyclePlan } from '@/training/melody'
 import { BEATS_DEFAULT, BPM_DEFAULT, meterFor, secondsPerBeat, type Meter } from '@/training/tempo'
 import { randomMode, type ChangeEvery, type ModePattern } from '@/training/patterns'

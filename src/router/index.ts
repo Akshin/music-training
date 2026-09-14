@@ -52,10 +52,38 @@ const router = createRouter({
       ],
     },
     {
+      path: '/note-on-beat',
+      component: () => import('@/views/note-on-beat/NoteOnBeatTrainingView.vue'),
+      meta: {
+        nav: [
+          { to: '/note-on-beat/issue', label: 'Описание' },
+          { to: '/note-on-beat/resolve', label: 'Тренировка' },
+        ],
+      },
+      children: [
+        {
+          path: '',
+          redirect: { name: 'note-on-beat-issue' },
+        },
+        {
+          path: 'issue',
+          name: 'note-on-beat-issue',
+          component: () => import('@/views/note-on-beat/IssueView.vue'),
+          meta: { title: 'Нота на долю - описание' },
+        },
+        {
+          path: 'resolve',
+          name: 'note-on-beat-resolve',
+          component: () => import('@/views/note-on-beat/ResolveView.vue'),
+          meta: { title: 'Нота на долю - тренировка' },
+        },
+      ],
+    },
+    {
       path: '/lab',
       name: 'lab',
       component: () => import('@/views/LabView.vue'),
-      meta: { title: 'Lab - живой анализ звука' },
+      meta: { title: 'Лаборатория' },
     },
     {
       path: '/:pathMatch(.*)*',
