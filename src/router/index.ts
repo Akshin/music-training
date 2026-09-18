@@ -80,6 +80,34 @@ const router = createRouter({
       ],
     },
     {
+      path: '/mouth-opening',
+      component: () => import('@/views/mouth-opening/MouthOpeningTrainingView.vue'),
+      meta: {
+        nav: [
+          { to: '/mouth-opening/issue', label: 'Описание' },
+          { to: '/mouth-opening/resolve', label: 'Тренировка' },
+        ],
+      },
+      children: [
+        {
+          path: '',
+          redirect: { name: 'mouth-opening-issue' },
+        },
+        {
+          path: 'issue',
+          name: 'mouth-opening-issue',
+          component: () => import('@/views/mouth-opening/IssueView.vue'),
+          meta: { title: 'Открываем рот - описание' },
+        },
+        {
+          path: 'resolve',
+          name: 'mouth-opening-resolve',
+          component: () => import('@/views/mouth-opening/ResolveView.vue'),
+          meta: { title: 'Открываем рот - тренировка' },
+        },
+      ],
+    },
+    {
       path: '/lab',
       name: 'lab',
       component: () => import('@/views/LabView.vue'),

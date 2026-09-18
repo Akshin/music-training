@@ -35,3 +35,8 @@ export const NOTE_ON_BEAT: ExerciseDefinition = {
   defaults: { bpm: 72, beats: 4 },
   listen: true,
 }
+
+/** Camera only: the mouth figure follows the face, no sound. */
+export const MOUTH_OPENING: ExerciseDefinition = {
+  title: 'Открываем рот',
+}

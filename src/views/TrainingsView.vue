@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { PhArrowUpRight, PhGuitar, PhWaveform } from '@phosphor-icons/vue'
+import { PhArrowUpRight, PhGuitar, PhMicrophone, PhSmiley, PhWaveform } from '@phosphor-icons/vue'
 </script>
 
 <template>
@@ -39,6 +39,20 @@ import { PhArrowUpRight, PhGuitar, PhWaveform } from '@phosphor-icons/vue'
             <span class="card__text">
               Услышь ноту и спой её с сильной доли. Микрофон слушает высоту и время вступления.
             </span>
+          </span>
+          <span class="card__icon" aria-hidden="true">
+            <PhArrowUpRight :size="16" weight="light" />
+          </span>
+        </RouterLink>
+      </li>
+      <li>
+        <RouterLink to="/mouth-opening/issue" class="card">
+          <span class="card__mark" aria-hidden="true">
+            <PhSmiley :size="20" weight="light" />
+          </span>
+          <span class="card__body">
+            <span class="card__title">Открываем рот</span>
+            <span class="card__text">Учимся открывать рот.</span>
           </span>
           <span class="card__icon" aria-hidden="true">
             <PhArrowUpRight :size="16" weight="light" />

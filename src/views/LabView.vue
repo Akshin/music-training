@@ -1,6 +1,13 @@
 <script setup lang="ts">
 import { onBeforeUnmount, ref, shallowRef } from 'vue'
-import { PhMicrophone, PhMicrophoneSlash, PhMusicNotes } from '@phosphor-icons/vue'
+import {
+  PhMicrophone,
+  PhMicrophoneSlash,
+  PhMusicNotes,
+  PhVideoCamera,
+  PhVideoCameraSlash,
+} from '@phosphor-icons/vue'
+import MouthFigure from '@/components/face/MouthFigure.vue'
 import PitchRoll from '@/components/pitch/PitchRoll.vue'
 import { targetEnd, type PitchSegment, type PitchTarget } from '@/components/pitch/trace'
 import VolumeBar from '@/components/volume/VolumeBar.vue'
@@ -8,6 +15,7 @@ import VolumeCapsule from '@/components/volume/VolumeCapsule.vue'
 import VolumeSegments from '@/components/volume/VolumeSegments.vue'
 import ExerciseConsole from '@/components/exercise/ExerciseConsole.vue'
 import { useExercise } from '@/composables/useExercise'
+import { useMouthTracker } from '@/composables/useMouthTracker'
 import { SANDBOX } from '@/training/exercises'
 
 // One live source for the whole sandbox: every component below gets the same real data. The
@@ -118,6 +126,17 @@ onBeforeUnmount(() => {
   cancelAnimationFrame(previewRaf)
 })
 
+// The mouth follows the webcam; `success` has no exercise behind it here, the slider only shows
+// how the colour blends.
+const face = useMouthTracker()
+const { status: faceStatus, error: faceError, mouth } = face
+const mouthSuccess = ref(0)
+
+function toggleCamera(): void {
+  if (faceStatus.value === 'running') face.stop()
+  else void face.start()
+}
+
 function toggleMic(): void {
   if (state.value === 'running') void stopListening()
   else startListening().catch(() => {})
@@ -215,6 +234,56 @@ function toggleMic(): void {
             :ahead="previewOn ? PREVIEW_AHEAD : 0"
             :now="previewNow"
           />
+        </li>
+      </ul>
+    </section>
+
+    <section class="category" aria-labelledby="category-mouth">
+      <h2 id="category-mouth" class="category__title">Рот</h2>
+      <ul class="specimens">
+        <li class="specimen specimen--wide">
+          <div class="pitch-tools">
+            <button
+              type="button"
+              class="preview"
+              :class="{ 'preview--on': faceStatus === 'running' }"
+              :aria-pressed="faceStatus === 'running'"
+              :disabled="faceStatus === 'loading'"
+              @click="toggleCamera"
+            >
+              <PhVideoCameraSlash
+                v-if="faceStatus === 'running'"
+                :size="16"
+                weight="light"
+                aria-hidden="true"
+              />
+              <PhVideoCamera v-else :size="16" weight="light" aria-hidden="true" />
+              {{
+                faceStatus === 'running'
+                  ? 'Выключить камеру'
+                  : faceStatus === 'loading'
+                    ? 'Подключаю…'
+                    : 'Включить камеру'
+              }}
+            </button>
+            <label class="success">
+              success
+              <input v-model.number="mouthSuccess" type="range" min="0" max="1" step="0.01" />
+              <output>{{ mouthSuccess.toFixed(2) }}</output>
+            </label>
+          </div>
+          <p v-if="faceError" class="error" role="alert">{{ faceError.message }}</p>
+          <div class="mouth-stage">
+            <MouthFigure
+              :class="{ 'mouth-stage--idle': !mouth }"
+              :open="mouth?.open ?? 0"
+              :narrow="mouth?.narrow ?? 0"
+              :aperture="mouth?.aperture ?? 0"
+              :width="mouth?.width ?? 0.5"
+              :success="mouthSuccess"
+            />
+          </div>
+          <code class="specimen__name">MouthFigure · useMouthTracker</code>
         </li>
       </ul>
     </section>
@@ -446,6 +515,35 @@ function toggleMic(): void {
   border-color: var(--accent);
   background: var(--accent);
   color: var(--accent-ink);
+}
+
+.preview:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+.success {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.success input {
+  accent-color: var(--accent);
+}
+
+.mouth-stage {
+  display: grid;
+  place-items: center;
+  min-height: 9rem;
+}
+
+.mouth-stage--idle {
+  opacity: 0.45;
 }
 
 .category__note {
