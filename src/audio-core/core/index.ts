@@ -124,6 +124,8 @@ export type {
   OnsetResult,
 } from './analysis/extractors/onset'
 export { onset } from './analysis/extractors/onset'
+export type { HarmonicsOptions, HarmonicsResult } from './analysis/extractors/harmonics'
+export { HARMONIC_COUNT, harmonics } from './analysis/extractors/harmonics'
 export type { ContourSummary } from './analysis/contour-stats'
 export { summarizeContour } from './analysis/contour-stats'
 

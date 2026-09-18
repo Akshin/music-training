@@ -10,6 +10,7 @@ import type { AnyExtractor } from './extractor'
 import { cpp } from './extractors/cpp'
 import { f0 } from './extractors/f0'
 import { formants } from './extractors/formants'
+import { harmonics } from './extractors/harmonics'
 import { level } from './extractors/level'
 import { loudness } from './extractors/loudness'
 import { onset } from './extractors/onset'
@@ -27,6 +28,7 @@ export const extractorRegistry: Readonly<Record<string, AnyExtractor>> = {
   [loudness.id]: loudness,
   [cpp.id]: cpp,
   [onset.id]: onset,
+  [harmonics.id]: harmonics,
 }
 
 export function resolveFeatureIds(ids: readonly string[]): AnyExtractor[] {

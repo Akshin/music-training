@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onBeforeUnmount, ref, shallowRef } from 'vue'
+import { computed, onBeforeUnmount, ref, shallowRef } from 'vue'
 import {
   PhMicrophone,
   PhMicrophoneSlash,
@@ -8,6 +8,7 @@ import {
   PhVideoCameraSlash,
 } from '@phosphor-icons/vue'
 import MouthFigure from '@/components/face/MouthFigure.vue'
+import HarmonicStrings from '@/components/timbre/HarmonicStrings.vue'
 import PitchRoll from '@/components/pitch/PitchRoll.vue'
 import { targetEnd, type PitchSegment, type PitchTarget } from '@/components/pitch/trace'
 import VolumeBar from '@/components/volume/VolumeBar.vue'
@@ -17,11 +18,26 @@ import ExerciseConsole from '@/components/exercise/ExerciseConsole.vue'
 import { useExercise } from '@/composables/useExercise'
 import { useMouthTracker } from '@/composables/useMouthTracker'
 import { SANDBOX } from '@/training/exercises'
+import {
+  TIMBRE_TARGET,
+  harmonicRatios,
+  lackingHarmonics,
+  stringStrengths,
+  timbreSuccess,
+} from '@/training/timbre'
 
 // One live source for the whole sandbox: every component below gets the same real data. The
 // console at the bottom drives the same session, so Play and the microphone share one clock.
 const exercise = useExercise(SANDBOX)
-const { level, pitch, micState: state, error, startListening, stopListening } = exercise.session
+const {
+  level,
+  pitch,
+  timbre,
+  micState: state,
+  error,
+  startListening,
+  stopListening,
+} = exercise.session
 
 /** Ranges to try the flexible note axis with, from a fifth to three octaves. */
 const PITCH_RANGES = [
@@ -125,6 +141,19 @@ function togglePreview(): void {
 onBeforeUnmount(() => {
   cancelAnimationFrame(previewRaf)
 })
+
+// Timbre: the strings follow the voice's first three harmonics against the default target.
+const ratios = computed(() => (timbre.value ? harmonicRatios(timbre.value) : null))
+const strengths = computed(() => stringStrengths(ratios.value, level.value))
+const timbreTargets = computed(() => stringStrengths(TIMBRE_TARGET, Math.max(level.value, 0.5)))
+const success = computed(() => (ratios.value ? timbreSuccess(ratios.value) : 0))
+const lacking = computed(() => (ratios.value ? lackingHarmonics(ratios.value) : []))
+const braids = ref(0)
+
+const formatDb = (value: number | undefined) =>
+  value === undefined
+    ? '—'
+    : `${value > 0 ? '+' : value < 0 ? '−' : ''}${Math.abs(Math.round(value))} дБ`
 
 // The mouth follows the webcam; `success` has no exercise behind it here, the slider only shows
 // how the colour blends.
@@ -234,6 +263,42 @@ function toggleMic(): void {
             :ahead="previewOn ? PREVIEW_AHEAD : 0"
             :now="previewNow"
           />
+        </li>
+      </ul>
+    </section>
+
+    <section class="category" aria-labelledby="category-timbre">
+      <h2 id="category-timbre" class="category__title">Тембр</h2>
+      <ul class="specimens">
+        <li class="specimen specimen--wide">
+          <HarmonicStrings
+            :strengths="strengths"
+            :targets="timbreTargets"
+            :success="success"
+            :lacking="lacking"
+            @braided="braids++"
+          />
+          <dl class="timbre-readout">
+            <div>
+              <dt>H2 к H1</dt>
+              <dd>{{ formatDb(ratios?.h2) }}</dd>
+            </div>
+            <div>
+              <dt>H3 к H1</dt>
+              <dd>{{ formatDb(ratios?.h3) }}</dd>
+            </div>
+            <div>
+              <dt>success</dt>
+              <dd>{{ success.toFixed(2) }}</dd>
+            </div>
+            <div>
+              <dt>Сплетено</dt>
+              <dd>{{ braids }}</dd>
+            </div>
+          </dl>
+          <code class="specimen__name">
+            HarmonicStrings · цель H2 ≥ {{ TIMBRE_TARGET.h2 }}, H3 ≥ {{ TIMBRE_TARGET.h3 }} дБ
+          </code>
         </li>
       </ul>
     </section>
@@ -534,6 +599,27 @@ function toggleMic(): void {
 
 .success input {
   accent-color: var(--accent);
+}
+
+.timbre-readout {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.75rem;
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.timbre-readout dt {
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.timbre-readout dd {
+  margin: 0.15rem 0 0;
+  font-weight: 600;
 }
 
 .mouth-stage {

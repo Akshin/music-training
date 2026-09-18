@@ -100,17 +100,18 @@ audio-core/
 
 Реализовано в M1:
 
-| id         | deps       | колонки                                            | результат                                                  |
-| ---------- | ---------- | -------------------------------------------------- | ---------------------------------------------------------- |
-| `spectrum` | —          | —                                                  | `magnitude[frameSize/2+1]`, нормировка: полный синус ≈ 1.0 |
-| `level`    | —          | `rms`, `dbfs`, `peak`                              | то же                                                      |
-| `f0`       | —          | `f0` (Гц или NaN), `f0Confidence`                  | YIN; опция `tracker: 'pyin'` (лаг 5 кадров)                |
-| `pitch`    | `f0`       | `midi`, `note`, `cents`                            | A4 настраиваемый                                           |
-| `vibrato`  | `f0`       | `vibratoRate`, `vibratoExtent`                     | 500 мс, ACF 4–12 Гц; extent / sinc(rate·окно)              |
-| `formants` | `f0`       | `f1`, `f2`, `f3`                                   | Burg LPC ~10 кГц, корни Durand–Kerner                      |
-| `loudness` | —          | `lufsMomentary`, `lufsShortTerm`, `lufsIntegrated` | K-weight; integrated = −70 + относительный −10 LU          |
-| `cpp`      | `f0`       | `cpp`                                              | Hillenbrand 1994, dB; NaN на неозвученном                  |
-| `onset`    | `spectrum` | `onsetStrength`                                    | Superflux (Böck): max-filter по частоте, затем flux        |
+| id          | deps             | колонки                                            | результат                                                  |
+| ----------- | ---------------- | -------------------------------------------------- | ---------------------------------------------------------- |
+| `spectrum`  | —                | —                                                  | `magnitude[frameSize/2+1]`, нормировка: полный синус ≈ 1.0 |
+| `level`     | —                | `rms`, `dbfs`, `peak`                              | то же                                                      |
+| `f0`        | —                | `f0` (Гц или NaN), `f0Confidence`                  | YIN; опция `tracker: 'pyin'` (лаг 5 кадров)                |
+| `pitch`     | `f0`             | `midi`, `note`, `cents`                            | A4 настраиваемый                                           |
+| `vibrato`   | `f0`             | `vibratoRate`, `vibratoExtent`                     | 500 мс, ACF 4–12 Гц; extent / sinc(rate·окно)              |
+| `formants`  | `f0`             | `f1`, `f2`, `f3`                                   | Burg LPC ~10 кГц, корни Durand–Kerner                      |
+| `loudness`  | —                | `lufsMomentary`, `lufsShortTerm`, `lufsIntegrated` | K-weight; integrated = −70 + относительный −10 LU          |
+| `cpp`       | `f0`             | `cpp`                                              | Hillenbrand 1994, dB; NaN на неозвученном                  |
+| `onset`     | `spectrum`       | `onsetStrength`                                    | Superflux (Böck): max-filter по частоте, затем flux        |
+| `harmonics` | `f0`, `spectrum` | `h1`, `h2`, `h3` (dBFS)                            | пик у k·f0 ± f0/3, парабола по dB; NaN на неозвученном     |
 
 ### Analyzer
 
@@ -396,6 +397,8 @@ Headless Chrome, `--use-file-for-fake-audio-capture` с WAV 220 Гц ±30 цен
 - **Лаборатория** — стенд M2–M7 на `/lab` заменён песочницей UI-компонентов (2026-09-14); функции
   движка остались в коде и тестах, сама песочница берёт громкость и высоту через `MicSource` +
   `WorkerHost` (экстракторы `level` и `pitch` с pYIN, без записи PCM).
+- **Тембр** ✔ экстрактор `harmonics` — уровни первых трёх гармоник; сессия приложения усредняет
+  их за 80 мс; 193 теста.
 
 ## Команды
 

@@ -14,6 +14,7 @@ import { WorkerHost } from '@audio-core/host/web/worker-host'
 import { MicSource } from '@audio-core/io/mic-source'
 import { EMPTY_PITCH_TRACE, type PitchTrace } from '@/components/pitch/trace'
 import { BEATS_DEFAULT, BPM_DEFAULT, meterFor } from '@/training/tempo'
+import type { Timbre } from '@/training/timbre'
 
 /** Musical position the listener hears right now, or `null` while the transport is stopped. */
 export type TrainingClock = () => MapPosition | null
@@ -41,6 +42,8 @@ const TRACE_SECONDS = 10
 const PITCH_FLOOR_DB = -55
 /** Frames taken around the targets when scoring, seconds each side. */
 const SCORE_MARGIN_SECONDS = 0.5
+/** Frames averaged into the harmonic levels (80 ms): single frames jitter by a few dB. */
+const TIMBRE_FRAMES = 8
 /** Encoded backing files kept in memory (a few MB each); decoded audio is kept for one only. */
 const FETCHED_LIMIT = 2
 
@@ -49,7 +52,7 @@ const FETCHED_LIMIT = 2
  *
  * Playback — metronome, reference notes, backing pad — runs on audio-core's lookahead transport and
  * starts and stops with `playing`, following tempo and meter without restarting. The microphone runs
- * on the same context: its PCM goes straight to the analysis worker (`level`, `pitch` with pYIN) and
+ * on the same context: its PCM goes straight to the analysis worker (`level`, `pitch` with pYIN, `harmonics`) and
  * every animation frame copies the newest frames out as a meter level and a pitch trace. Because
  * both share the context, a moment on the playback grid maps onto the trace clock
  * (`traceTimeOf`), which is what `scoreNotes` needs to judge pitch and timing. Start either part from
@@ -66,6 +69,7 @@ export function useExerciseSession(options: ExerciseSessionOptions = {}) {
   const error = ref<string | null>(null)
   const level = ref(0)
   const pitch = shallowRef<PitchTrace>(EMPTY_PITCH_TRACE)
+  const timbre = shallowRef<Timbre | null>(null)
 
   let context: AudioContext | null = null
   let transport: WebTransport | null = null
@@ -85,6 +89,7 @@ export function useExerciseSession(options: ExerciseSessionOptions = {}) {
   let lastFrame = 0
   let midiFrames = new Float32Array(0)
   let loudFrames = new Float32Array(0)
+  const harmonicFrames = [0, 1, 2].map(() => new Float32Array(TIMBRE_FRAMES))
 
   const fetched = new Map<string, Promise<ArrayBuffer>>()
   let decoded: { url: string; buffer: AudioBuffer } | null = null
@@ -149,7 +154,7 @@ export function useExerciseSession(options: ExerciseSessionOptions = {}) {
       }
       const worker = new WorkerHost({
         sampleRate: info.sampleRate,
-        features: ['level', 'pitch'],
+        features: ['level', 'pitch', 'harmonics'],
         options: { f0: { tracker: 'pyin' } },
         record: false,
       })
@@ -189,6 +194,7 @@ export function useExerciseSession(options: ExerciseSessionOptions = {}) {
     shown = 0
     level.value = 0
     pitch.value = EMPTY_PITCH_TRACE
+    timbre.value = null
     micState.value = 'idle'
   }
 
@@ -214,12 +220,44 @@ export function useExerciseSession(options: ExerciseSessionOptions = {}) {
       endTime: count === 0 ? 0 : timeline.frameTime(end - 1),
     }
 
+    timbre.value = readTimbre(timeline, end, count)
+
     const target = count === 0 ? 0 : (loudFrames[count - 1] ?? 0)
     const elapsed = Math.max(0, (now - lastFrame) / 1000)
     lastFrame = now
     shown = Math.max(target, shown - elapsed / RELEASE_SECONDS)
     level.value = shown
     raf = requestAnimationFrame(tick)
+  }
+
+  /**
+   * Harmonic levels over the newest frames, averaged in power. Frames without a pitch (unvoiced or
+   * too quiet) are skipped; null unless at least half of them carry a voice.
+   */
+  function readTimbre(timeline: WorkerHost['timeline'], end: number, count: number): Timbre | null {
+    const frames = Math.min(TIMBRE_FRAMES, count)
+    const [first, second, third] = harmonicFrames as [Float32Array, Float32Array, Float32Array]
+    timeline.slice('h1', end - frames, end, first)
+    timeline.slice('h2', end - frames, end, second)
+    timeline.slice('h3', end - frames, end, third)
+    let p1 = 0
+    let p2 = 0
+    let p3 = 0
+    let voiced = 0
+    for (let i = 0; i < frames; i++) {
+      const h1 = first[i] ?? NaN
+      const h2 = second[i] ?? NaN
+      const h3 = third[i] ?? NaN
+      if (Number.isNaN(midiFrames[count - frames + i] ?? NaN)) continue
+      if (!Number.isFinite(h1) || !Number.isFinite(h2) || !Number.isFinite(h3)) continue
+      p1 += 10 ** (h1 / 10)
+      p2 += 10 ** (h2 / 10)
+      p3 += 10 ** (h3 / 10)
+      voiced++
+    }
+    if (voiced * 2 < TIMBRE_FRAMES) return null
+    const db = (power: number) => 10 * Math.log10(power / voiced)
+    return { h1: db(p1), h2: db(p2), h3: db(p3) }
   }
 
   const clock: TrainingClock = () => {
@@ -366,6 +404,8 @@ export function useExerciseSession(options: ExerciseSessionOptions = {}) {
     level: readonly(level),
     /** Recent microphone frames — pitch and loudness — for pitch charts. */
     pitch: pitchView,
+    /** Levels of the voice's first three harmonics over the last 80 ms; null while not singing. */
+    timbre: readonly(timbre),
     clock,
     setNotes,
     startListening,
