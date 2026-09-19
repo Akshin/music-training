@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, shallowRef, watch } from 'vue'
-import { PhMusicNotes } from '@phosphor-icons/vue'
+import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
+import { PhInfo, PhMusicNotes } from '@phosphor-icons/vue'
 import type { MapPosition } from '@audio-core/core/index'
 import IconSwitch from '@/components/controls/IconSwitch.vue'
 import ExerciseConsole from '@/components/exercise/ExerciseConsole.vue'
@@ -26,7 +26,6 @@ import {
   COUNT_IN_BARS,
   gradeNote,
   planRun,
-  runBarAt,
   runBarBeat,
   runBarElements,
   runBarNotes,
@@ -55,6 +54,28 @@ const definition: ExerciseDefinition = {
 const exercise = useExercise(definition)
 const { settings, session } = exercise
 const { playing, pitch, error, micState, level } = session
+
+// The description greets whoever opens the link, and can be read again from the terms row.
+const about = ref<HTMLDialogElement | null>(null)
+
+function openAbout() {
+  about.value?.showModal()
+}
+
+function closeAbout() {
+  about.value?.close()
+}
+
+/** A click on the backdrop lands on the dialog itself, outside its box. */
+function onAboutClick(event: MouseEvent) {
+  if (event.target === about.value) closeAbout()
+}
+
+onMounted(() => {
+  // The route's title is generic; the tab should say which training this is.
+  if (draft.title) document.title = draft.title
+  if (draft.description) openAbout()
+})
 
 /** The reference plays the training's notes along the clicks. */
 const melody = ref(true)
@@ -97,9 +118,6 @@ const epoch = computed(() => position.value?.epoch ?? 0)
 const sequence = computed(() =>
   position.value === null ? -1 : Math.max(-1, position.value.bar - COUNT_IN_BARS),
 )
-const where = computed(() => (position.value ? runBarAt(plan, position.value.bar) : null))
-const beatInBar = computed(() => position.value?.beat ?? -1)
-const counting = computed(() => playing.value && position.value !== null && where.value === null)
 
 // The reference plays this bar and the next, so the next bar's first note is never late.
 watch(
@@ -215,29 +233,6 @@ function passText(summary: PassSummary): string {
 <template>
   <ExerciseScreen :title="definition.title">
     <section class="stage" :aria-label="definition.title">
-      <div class="cue">
-        <p class="cue__phase" :class="{ 'cue__phase--sing': where !== null }">
-          {{ !playing ? 'Нажми Play' : counting || !position ? 'Приготовься' : 'Пой' }}
-        </p>
-        <p class="cue__where">
-          <template v-if="where">
-            Такт {{ where.bar + 1 }} из {{ plan.bars }} · проход {{ where.pass + 1 }}
-          </template>
-          <template v-else>{{ definition.title }}</template>
-        </p>
-        <ol class="beats" aria-hidden="true">
-          <li
-            v-for="beat in plan.beatsPerBar"
-            :key="beat"
-            class="beats__dot"
-            :class="{
-              'beats__dot--on': beat - 1 === beatInBar,
-              'beats__dot--sing': where !== null,
-            }"
-          />
-        </ol>
-      </div>
-
       <ul class="terms" aria-label="Условия тренировки">
         <li v-if="onset" class="term" :title="onset.hint">
           <span class="term__label">Смык</span>
@@ -255,6 +250,12 @@ function passText(summary: PassSummary): string {
         <li v-if="draft.bpmRange" class="term">
           <span class="term__label">Темп</span>
           {{ draft.bpmRange.min }}–{{ draft.bpmRange.max }}
+        </li>
+        <li v-if="draft.description">
+          <button type="button" class="term term--button" @click="openAbout">
+            <PhInfo :size="14" weight="light" aria-hidden="true" />
+            Описание
+          </button>
         </li>
       </ul>
 
@@ -308,6 +309,21 @@ function passText(summary: PassSummary): string {
       </ol>
 
       <p v-if="error" class="error" role="alert">{{ error }}</p>
+
+      <dialog
+        v-if="draft.description"
+        ref="about"
+        class="about"
+        aria-labelledby="about-title"
+        @click="onAboutClick"
+      >
+        <div class="about__box">
+          <p class="about__kicker">Тренировка</p>
+          <h2 id="about-title" class="about__title">{{ definition.title }}</h2>
+          <p class="about__text">{{ draft.description }}</p>
+          <button type="button" class="about__go" autofocus @click="closeAbout">Понятно</button>
+        </div>
+      </dialog>
     </section>
 
     <template #dock>
@@ -343,58 +359,104 @@ function passText(summary: PassSummary): string {
   padding: 1.5rem 1rem;
 }
 
-.cue {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 0.4rem 1.1rem;
-}
-
-.cue__phase {
-  margin: 0;
-  font-size: clamp(1.8rem, 4vw, 2.6rem);
-  font-weight: 600;
-  letter-spacing: -0.04em;
-  color: var(--muted);
-  transition: color 280ms var(--ease);
-}
-
-.cue__phase--sing {
+.term--button {
   color: var(--ink);
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
 }
 
-.cue__where {
-  margin: 0;
-  color: var(--muted);
-  font-variant-numeric: tabular-nums;
+.term--button:hover {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
 }
 
-.beats {
-  display: flex;
-  gap: 0.45rem;
-  margin: 0 0 0 auto;
+.term--button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.about {
+  width: min(32rem, calc(100% - 2rem));
+  max-height: calc(100dvh - 4rem);
   padding: 0;
-  list-style: none;
-  align-self: center;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-core);
+  background: var(--bg-raised);
+  color: var(--ink);
+  box-shadow: 0 24px 64px var(--shadow);
 }
 
-.beats__dot {
-  width: 0.55rem;
-  height: 0.55rem;
-  border-radius: 50%;
-  background: color-mix(in srgb, var(--ink) 14%, transparent);
-  transition:
-    background 120ms linear,
-    transform 120ms linear;
+.about::backdrop {
+  background: rgb(8 10 14 / 55%);
+  backdrop-filter: blur(4px);
 }
 
-.beats__dot--on {
-  background: var(--muted);
-  transform: scale(1.25);
+.about[open] {
+  animation: about-in 320ms var(--ease);
 }
 
-.beats__dot--on.beats__dot--sing {
+@keyframes about-in {
+  from {
+    opacity: 0;
+    transform: translateY(0.75rem) scale(0.98);
+  }
+}
+
+.about__box {
+  display: grid;
+  gap: 0.75rem;
+  padding: 1.5rem 1.6rem 1.4rem;
+}
+
+.about__kicker {
+  margin: 0;
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.about__title {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.about__text {
+  margin: 0;
+  color: color-mix(in srgb, var(--ink) 85%, var(--muted));
+  line-height: 1.6;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+
+.about__go {
+  justify-self: end;
+  margin-top: 0.4rem;
+  padding: 0.65rem 1.3rem;
+  border: none;
+  border-radius: var(--radius-pill);
   background: var(--accent);
+  color: var(--accent-ink);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.about__go:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .about[open] {
+    animation: none;
+  }
 }
 
 .terms {

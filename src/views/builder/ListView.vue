@@ -117,6 +117,9 @@ function confirmRemove(training: SavedTraining) {
           <span class="item__date">{{ savedAt(training) }}</span>
         </div>
         <p class="item__meta">{{ summary(training.draft).join(' · ') }}</p>
+        <p v-if="training.draft.description" class="item__description">
+          {{ training.draft.description }}
+        </p>
 
         <div v-if="training.draft.bars.length" class="item__bars" aria-hidden="true">
           <div
@@ -289,6 +292,18 @@ function confirmRemove(training: SavedTraining) {
   margin: 0;
   color: var(--muted);
   font-size: 0.85rem;
+}
+
+.item__description {
+  display: -webkit-box;
+  margin: 0;
+  overflow: hidden;
+  color: color-mix(in srgb, var(--ink) 80%, var(--muted));
+  font-size: 0.9rem;
+  line-height: 1.5;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
 }
 
 .item__bars {

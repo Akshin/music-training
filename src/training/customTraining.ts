@@ -25,12 +25,13 @@ const EXHALE = 130
  * `[version, title, bpmMin, bpmMax, loudness, beats, onset, bars]`: a free tempo is `0, 0`, free
  * loudness `-1`, loudness and onset are indexes into their option lists, and each note is one
  * number, `pitch * 64 + length * 8 + kind`, with length and kind as indexes too; a rest, an inhale
- * and an exhale take pitches 128, 129 and 130. Reprises follow, if any, as flat
- * `[from, to, times, …]`; links made before them simply have none.
+ * and an exhale take pitches 128, 129 and 130. Then, if there are any, reprises as flat
+ * `[from, to, times, …]` and the description; links made before them simply end earlier.
  */
 type Payload =
   | [number, string, number, number, number, number, number, number[][]]
   | [number, string, number, number, number, number, number, number[][], number[]]
+  | [number, string, number, number, number, number, number, number[][], number[], string]
 
 function packNote(note: BuilderNote): number {
   const length = NOTE_LENGTHS.findIndex((option) => option.sixteenths === note.sixteenths)
@@ -60,17 +61,20 @@ export function toPayload(draft: TrainingDraft): Payload {
     ONSETS.findIndex((option) => option.onset === draft.onset),
     draft.bars.map((bar) => bar.notes.map(packNote)),
   ]
-  if (draft.repeats.length === 0) return payload
-  return [...payload, draft.repeats.flatMap((repeat) => [repeat.from, repeat.to, repeat.times])]
+  const repeats = draft.repeats.flatMap((repeat) => [repeat.from, repeat.to, repeat.times])
+  if (draft.description !== '') return [...payload, repeats, draft.description]
+  return repeats.length === 0 ? payload : [...payload, repeats]
 }
 
 /** A draft from a payload, checked like a stored one; null when it is not a payload. */
 export function fromPayload(value: unknown): TrainingDraft | null {
   if (!Array.isArray(value) || value[0] !== VERSION || value.length < 8) return null
-  const [, title, bpmMin, bpmMax, loudness, beats, onset, bars, repeats] = value as unknown[]
+  const [, title, bpmMin, bpmMax, loudness, beats, onset, bars, repeats, description] =
+    value as unknown[]
   const flat = Array.isArray(repeats) ? repeats : []
   return parseDraft({
     title,
+    description,
     bpmRange: bpmMin && bpmMax ? { min: bpmMin, max: bpmMax } : null,
     loudness: typeof loudness === 'number' ? LOUDNESS_ZONES[loudness]?.zone : null,
     beats,

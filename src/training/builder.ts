@@ -114,8 +114,14 @@ export interface BuilderBar {
   readonly notes: readonly BuilderNote[]
 }
 
+/** Longest title and description a training keeps, characters. */
+export const TITLE_MAX = 80
+export const DESCRIPTION_MAX = 1000
+
 export interface TrainingDraft {
   readonly title: string
+  /** What to do and why, shown to whoever opens the training's link. */
+  readonly description: string
   /** Tempos the singer may pick from; null leaves the tempo free. */
   readonly bpmRange: BpmRange | null
   /** Loudness to sing at; null leaves it free. */
@@ -349,6 +355,7 @@ export function pitchSpan(notes: readonly BuilderNote[]): { low: number; high: n
 
 export const EMPTY_DRAFT: TrainingDraft = {
   title: '',
+  description: '',
   bpmRange: null,
   loudness: null,
   beats: 4,
@@ -393,7 +400,9 @@ export function parseDraft(value: unknown): TrainingDraft | null {
     : []
   const range = raw.bpmRange as Record<string, unknown> | null | undefined
   return {
-    title: typeof raw.title === 'string' ? raw.title : '',
+    title: typeof raw.title === 'string' ? raw.title.slice(0, TITLE_MAX) : '',
+    description:
+      typeof raw.description === 'string' ? raw.description.slice(0, DESCRIPTION_MAX) : '',
     bpmRange:
       range && typeof range.min === 'number' && typeof range.max === 'number'
         ? clampBpmRange({ min: range.min, max: range.max })

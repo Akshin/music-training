@@ -31,6 +31,8 @@ import { noteName } from '@/training/keys'
 import { copyText, trainingLink, useCustomTrainings } from '@/composables/useCustomTrainings'
 import {
   BPM_RANGE_DEFAULT,
+  DESCRIPTION_MAX,
+  TITLE_MAX,
   LOUDNESS_ZONES,
   NOTE_KINDS,
   NOTE_LENGTHS,
@@ -97,6 +99,7 @@ const initial = saved?.draft ?? store.loadNewDraft()
 const savedSnapshot = ref(saved ? JSON.stringify(saved.draft) : null)
 
 const title = ref(initial.title)
+const description = ref(initial.description)
 const bpmRange = ref<BpmRange | null>(initial.bpmRange)
 /** The last range chosen, kept while the range is off so switching it back restores it. */
 const lastBpmRange = ref<BpmRange>(initial.bpmRange ?? BPM_RANGE_DEFAULT)
@@ -118,6 +121,7 @@ let flashTimer = 0
 
 const draft = computed<TrainingDraft>(() => ({
   title: title.value,
+  description: description.value,
   bpmRange: bpmRange.value,
   loudness: loudness.value,
   beats: beats.value,
@@ -141,7 +145,11 @@ const saveState = computed(() => {
 })
 
 async function save() {
-  const value: TrainingDraft = { ...draft.value, title: title.value.trim() }
+  const value: TrainingDraft = {
+    ...draft.value,
+    title: title.value.trim(),
+    description: description.value.trim(),
+  }
   const id = store.save(value, savedId.value)
   savedSnapshot.value = JSON.stringify(draft.value)
   if (savedId.value === undefined) {
@@ -484,14 +492,9 @@ onBeforeUnmount(() => {
   <main id="main" class="builder">
     <section class="head">
       <p class="kicker">Конструктор</p>
-      <input
-        v-model="title"
-        class="head__title"
-        type="text"
-        placeholder="Новая тренировка"
-        aria-label="Название тренировки"
-        maxlength="80"
-      />
+      <h1 class="head__title" :class="{ 'head__title--empty': !title.trim() }">
+        {{ title.trim() || 'Новая тренировка' }}
+      </h1>
       <p class="head__lead">
         Задай условия, набери ноты по тактам — заполненный такт уезжает в таймлайн.
       </p>
@@ -536,6 +539,37 @@ onBeforeUnmount(() => {
         <span v-if="current.length" class="share__note">
           Незаполненный такт в ссылку не попал.
         </span>
+      </div>
+    </section>
+
+    <section class="panel" aria-labelledby="about-title">
+      <h2 id="about-title" class="panel__title">О тренировке</h2>
+      <div class="about">
+        <label class="field">
+          <span class="field__head">
+            <span class="ctrl-title">Название</span>
+          </span>
+          <input
+            v-model="title"
+            class="field__input"
+            type="text"
+            placeholder="Например, «Гамма со слайдом»"
+            :maxlength="TITLE_MAX"
+          />
+        </label>
+        <label class="field">
+          <span class="field__head">
+            <span class="ctrl-title">Описание</span>
+            <span class="field__count">{{ description.length }} / {{ DESCRIPTION_MAX }}</span>
+          </span>
+          <textarea
+            v-model="description"
+            class="field__input field__input--area"
+            rows="4"
+            placeholder="Что делать и на что обратить внимание. Покажется тому, кто откроет тренировку по ссылке."
+            :maxlength="DESCRIPTION_MAX"
+          />
+        </label>
       </div>
     </section>
 
@@ -877,28 +911,66 @@ onBeforeUnmount(() => {
 }
 
 .head__title {
-  display: block;
-  width: 100%;
   margin: 0 0 0.85rem;
-  padding: 0;
-  border: none;
-  border-bottom: 1px dashed transparent;
-  background: transparent;
-  color: var(--ink);
   font-size: clamp(2rem, 4.6vw, 3.2rem);
   font-weight: 600;
   letter-spacing: -0.045em;
   line-height: 1.15;
-  outline: none;
+  overflow-wrap: anywhere;
 }
 
-.head__title::placeholder {
+.head__title--empty {
   color: color-mix(in srgb, var(--muted) 70%, transparent);
 }
 
-.head__title:hover,
-.head__title:focus {
-  border-bottom-color: var(--line);
+.about {
+  display: grid;
+  gap: 1rem;
+}
+
+.field {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.field__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.field__count {
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.field__input {
+  width: 100%;
+  padding: 0.65rem 0.85rem;
+  border: 1px solid var(--line);
+  border-radius: 0.8rem;
+  background: var(--bg-inset);
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.95rem;
+  outline: none;
+  transition: border-color 200ms var(--ease);
+}
+
+.field__input::placeholder {
+  color: color-mix(in srgb, var(--muted) 75%, transparent);
+}
+
+.field__input:focus {
+  border-color: var(--accent);
+}
+
+.field__input--area {
+  min-height: 6.5rem;
+  resize: vertical;
+  line-height: 1.5;
 }
 
 .head__lead {

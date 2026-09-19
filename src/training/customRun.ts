@@ -82,13 +82,6 @@ export function planRun(draft: TrainingDraft): RunPlan {
   }
 }
 
-/** Where a bar of the clock falls in the training; null during the count-in. */
-export function runBarAt(plan: RunPlan, clockBar: number): { pass: number; bar: number } | null {
-  const bar = clockBar - COUNT_IN_BARS
-  if (bar < 0 || plan.bars === 0) return null
-  return { pass: Math.floor(bar / plan.bars), bar: bar % plan.bars }
-}
-
 /** Beat on the clock where training bar `sequence` (counted across passes) starts. */
 export function runBarBeat(plan: RunPlan, sequence: number): number {
   return (sequence + COUNT_IN_BARS) * plan.beatsPerBar
