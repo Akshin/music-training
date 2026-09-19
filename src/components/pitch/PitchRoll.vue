@@ -3,6 +3,13 @@ import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { loudnessColorTable } from '@/components/loudness'
 import { noteName } from '@/training/keys'
 import { placeSegments, slideEase, type PitchTarget, type PitchTrace } from './trace'
+import {
+  breathPhaseAt,
+  drawBreath,
+  loopedBreathPhase,
+  rgbChannels,
+  type BreathTarget,
+} from './breath'
 
 const props = withDefaults(
   defineProps<{
@@ -18,6 +25,13 @@ const props = withDefaults(
     ahead?: number
     /** Notes on the trace clock, behind the band, shaped by their segments: hold, staccato, slide. */
     targets?: readonly PitchTarget[]
+    /** Inhales and exhales on the trace clock, drawn as veils of haze. */
+    breaths?: readonly BreathTarget[]
+    /**
+     * Play every breath over and over at its own length instead of once as now passes it: for
+     * previews, where now stands still.
+     */
+    breathLoop?: boolean
     /**
      * Now on the trace clock while there are no frames to take it from (the microphone is off), so
      * targets can still move. With frames, the newest frame is now.
@@ -29,6 +43,8 @@ const props = withDefaults(
     seconds: 6,
     ahead: 0,
     targets: () => [],
+    breaths: () => [],
+    breathLoop: false,
     now: undefined,
     label: 'Высота звука во времени',
   },
@@ -348,6 +364,45 @@ function drawNote(
   copy(ringLayer, 0.35)
 }
 
+/** How far below its point a breath's haze reaches, in lanes, and at most of the chart. */
+const BREATH_DEPTH_LANES = 5
+const BREATH_DEPTH_MAX = 0.45
+
+/** Breaths hang from their pitch: the point sits just under that lane's centre. */
+function drawBreaths(
+  context: CanvasRenderingContext2D,
+  now: number,
+  xOfTime: (seconds: number) => number,
+  yOf: (midi: number) => number,
+  lane: number,
+  middle: number,
+): void {
+  if (props.breaths.length === 0) return
+  const channels = rgbChannels(palette.muted)
+  const loopClock = performance.now() / 1000
+  for (const breath of props.breaths) {
+    const phase = props.breathLoop
+      ? loopedBreathPhase(breath, loopClock)
+      : breathPhaseAt(breath, now)
+    if (phase === null) continue
+    const left = xOfTime(breath.start)
+    const right = xOfTime(breath.start + breath.duration)
+    if (right < GUTTER || left > width) continue
+    drawBreath(
+      context,
+      breath.kind,
+      phase,
+      {
+        centre: (left + right) / 2,
+        halfWidth: (right - left) / 2,
+        point: yOf(breath.midi ?? middle) + lane * 0.2,
+        depth: Math.min(lane * BREATH_DEPTH_LANES, height * BREATH_DEPTH_MAX),
+      },
+      channels,
+    )
+  }
+}
+
 function draw(): void {
   const context = canvas.value?.getContext('2d')
   if (context === undefined || context === null || width === 0 || height === 0) return
@@ -399,6 +454,7 @@ function draw(): void {
     for (const target of props.targets) {
       drawNote(context, target, xOfTime, yOf, blockHeight, low, high)
     }
+    drawBreaths(context, now, xOfTime, yOf, lane, (low + high) / 2)
     context.restore()
   }
 
@@ -523,6 +579,23 @@ function draw(): void {
   }
 }
 
+// Looping breaths move on their own, so the chart redraws every frame while there are any.
+let breathFrame = 0
+
+function breathTick(): void {
+  draw()
+  breathFrame = requestAnimationFrame(breathTick)
+}
+
+watch(
+  () => props.breathLoop && props.breaths.length > 0,
+  (looping) => {
+    cancelAnimationFrame(breathFrame)
+    if (looping) breathFrame = requestAnimationFrame(breathTick)
+  },
+  { immediate: true },
+)
+
 onMounted(() => {
   readPalette()
   resizeObserver = new ResizeObserver(resize)
@@ -532,12 +605,22 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  cancelAnimationFrame(breathFrame)
   resizeObserver?.disconnect()
   colorScheme.removeEventListener('change', onSchemeChange)
 })
 
 watch(
-  () => [props.trace, props.targets, props.low, props.high, props.seconds, props.ahead, props.now],
+  () => [
+    props.trace,
+    props.targets,
+    props.breaths,
+    props.low,
+    props.high,
+    props.seconds,
+    props.ahead,
+    props.now,
+  ],
   draw,
 )
 </script>

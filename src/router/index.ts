@@ -52,34 +52,6 @@ const router = createRouter({
       ],
     },
     {
-      path: '/note-on-beat',
-      component: () => import('@/views/note-on-beat/NoteOnBeatTrainingView.vue'),
-      meta: {
-        nav: [
-          { to: '/note-on-beat/issue', label: 'Описание' },
-          { to: '/note-on-beat/resolve', label: 'Тренировка' },
-        ],
-      },
-      children: [
-        {
-          path: '',
-          redirect: { name: 'note-on-beat-issue' },
-        },
-        {
-          path: 'issue',
-          name: 'note-on-beat-issue',
-          component: () => import('@/views/note-on-beat/IssueView.vue'),
-          meta: { title: 'Нота на долю - описание' },
-        },
-        {
-          path: 'resolve',
-          name: 'note-on-beat-resolve',
-          component: () => import('@/views/note-on-beat/ResolveView.vue'),
-          meta: { title: 'Нота на долю - тренировка' },
-        },
-      ],
-    },
-    {
       path: '/mouth-opening',
       component: () => import('@/views/mouth-opening/MouthOpeningTrainingView.vue'),
       meta: {
@@ -106,6 +78,41 @@ const router = createRouter({
           meta: { title: 'Открываем рот - тренировка' },
         },
       ],
+    },
+    {
+      path: '/builder',
+      component: () => import('@/views/builder/BuilderTrainingView.vue'),
+      meta: {
+        nav: [
+          { to: '/builder/trainings', label: 'Мои тренировки' },
+          { to: '/builder/edit', label: 'Конструктор' },
+        ],
+      },
+      children: [
+        {
+          path: '',
+          redirect: { name: 'builder-trainings' },
+        },
+        {
+          path: 'trainings',
+          name: 'builder-trainings',
+          component: () => import('@/views/builder/ListView.vue'),
+          meta: { title: 'Мои тренировки' },
+        },
+        {
+          // `?id=` edits a saved training; without it a new one is built.
+          path: 'edit',
+          name: 'builder-edit',
+          component: () => import('@/views/builder/EditView.vue'),
+          meta: { title: 'Конструктор тренировок' },
+        },
+      ],
+    },
+    {
+      path: '/custom-training',
+      name: 'custom-training',
+      component: () => import('@/views/CustomTrainingView.vue'),
+      meta: { title: 'Своя тренировка' },
     },
     {
       path: '/lab',

@@ -18,10 +18,15 @@ const props = withDefaults(
   defineProps<{
     modelValue?: number
     compact?: boolean
+    /** Narrower tempo limits than the app's, e.g. the range a training allows. */
+    min?: number
+    max?: number
   }>(),
   {
     modelValue: BPM_DEFAULT,
     compact: false,
+    min: BPM_MIN,
+    max: BPM_MAX,
   },
 )
 
@@ -29,35 +34,43 @@ const emit = defineEmits<{
   'update:modelValue': [bpm: number]
 }>()
 
-const bpm = ref(clampBpm(props.modelValue))
+/** The app's limits narrowed to `min`…`max`. */
+function clampToRange(value: number): number {
+  return Math.min(props.max, Math.max(props.min, clampBpm(value)))
+}
+
+const bpm = ref(clampToRange(props.modelValue))
 
 watch(
   () => props.modelValue,
   (next) => {
-    const clamped = clampBpm(next)
+    const clamped = clampToRange(next)
     if (clamped !== bpm.value) bpm.value = clamped
   },
 )
 
 function setBpm(value: number) {
-  const next = clampBpm(value)
+  const next = clampToRange(value)
   if (next === bpm.value) return
   bpm.value = next
   emit('update:modelValue', next)
 }
 
+/** Share of the dial's sweep a tempo takes; a range of one tempo sits at the middle. */
+function sweepOf(value: number): number {
+  const span = props.max - props.min
+  return span > 0 ? (clampToRange(value) - props.min) / span : 0.5
+}
+
 function bpmToAngle(value: number): number {
-  const t = (clampBpm(value) - BPM_MIN) / (BPM_MAX - BPM_MIN)
+  const t = sweepOf(value)
   return ANGLE_MIN + t * (ANGLE_MAX - ANGLE_MIN)
 }
 
 const knobAngle = computed(() => bpmToAngle(bpm.value))
 
 /** Arc fill in degrees over the −135°…+135° sweep (270° total). */
-const sweepDegrees = computed(() => {
-  const t = (bpm.value - BPM_MIN) / (BPM_MAX - BPM_MIN)
-  return t * (ANGLE_MAX - ANGLE_MIN)
-})
+const sweepDegrees = computed(() => sweepOf(bpm.value) * (ANGLE_MAX - ANGLE_MIN))
 
 const dragging = ref(false)
 const dragMoved = ref(false)
@@ -80,7 +93,7 @@ function onPointerMove(event: PointerEvent) {
   if (!dragMoved.value && Math.abs(dy) < DRAG_THRESHOLD_PX) return
   dragMoved.value = true
   // Up (negative dy) raises tempo; down lowers it.
-  const delta = (-dy / DRAG_TRAVEL_PX) * (BPM_MAX - BPM_MIN)
+  const delta = (-dy / DRAG_TRAVEL_PX) * Math.max(1, props.max - props.min)
   setBpm(dragStartBpm.value + delta)
 }
 
@@ -127,7 +140,12 @@ function onInputChange(event: Event) {
 </script>
 
 <template>
-  <div class="bpm-control" :class="{ 'bpm-control--compact': compact }" role="group" aria-label="BPM">
+  <div
+    class="bpm-control"
+    :class="{ 'bpm-control--compact': compact }"
+    role="group"
+    aria-label="BPM"
+  >
     <label class="bpm-control__label ctrl-title" for="bpm-input">
       <PhGauge :size="14" weight="light" aria-hidden="true" />
       BPM
@@ -137,8 +155,8 @@ function onInputChange(event: Event) {
       class="bpm-control__input"
       type="number"
       inputmode="numeric"
-      :min="BPM_MIN"
-      :max="BPM_MAX"
+      :min="min"
+      :max="max"
       :value="bpm"
       @change="onInputChange"
     />
@@ -148,8 +166,8 @@ function onInputChange(event: Event) {
       class="bpm-control__knob"
       :class="{ 'bpm-control__knob--dragging': dragging }"
       :style="{ '--sweep': sweepDegrees }"
-      :aria-valuemin="BPM_MIN"
-      :aria-valuemax="BPM_MAX"
+      :aria-valuemin="min"
+      :aria-valuemax="max"
       :aria-valuenow="bpm"
       :aria-label="`Темп ${bpm} BPM. Тяните вверх или вниз, тап — tap tempo`"
       role="slider"
@@ -170,7 +188,7 @@ function onInputChange(event: Event) {
       <span v-if="!compact" class="bpm-control__hint">tap</span>
     </button>
 
-    <p v-if="!compact" class="bpm-control__range">{{ BPM_MIN }}–{{ BPM_MAX }}</p>
+    <p v-if="!compact" class="bpm-control__range">{{ min }}–{{ max }}</p>
   </div>
 </template>
 
@@ -278,8 +296,7 @@ function onInputChange(event: Event) {
   border-radius: 50%;
   border: 1px solid var(--line);
   background:
-    radial-gradient(circle at 32% 28%, rgb(255 255 255 / 10%), transparent 42%),
-    var(--bg-raised);
+    radial-gradient(circle at 32% 28%, rgb(255 255 255 / 10%), transparent 42%), var(--bg-raised);
   box-shadow:
     inset 0 1px 1px rgb(255 255 255 / 12%),
     inset 0 -10px 18px rgb(8 10 14 / 22%);

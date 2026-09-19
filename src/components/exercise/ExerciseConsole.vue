@@ -14,10 +14,18 @@ const props = withDefaults(
     /** Title of the bay filled by the `exercise` slot. */
     exerciseTitle?: string
     metronomeHint?: string
+    /** Tempo limits narrower than the app's: a training that allows only a range. */
+    bpmMin?: number
+    bpmMax?: number
+    /** The meter is part of the exercise and cannot be changed. */
+    meterLocked?: boolean
   }>(),
   {
     exerciseTitle: 'Упражнение',
     metronomeHint: 'Щелчки метронома. Упражнение идёт по тактам и без них.',
+    bpmMin: undefined,
+    bpmMax: undefined,
+    meterLocked: false,
   },
 )
 
@@ -44,9 +52,15 @@ const { playing } = props.exercise.session
           Ритм
         </h2>
         <div class="bay__body bay__body--rhythm">
-          <BpmControl v-model="bpm" compact />
+          <BpmControl v-model="bpm" compact :min="bpmMin" :max="bpmMax" />
           <div class="bay__side">
-            <TimeSignatureControl v-model="beats" />
+            <fieldset
+              class="bay__meter"
+              :disabled="meterLocked"
+              :title="meterLocked ? 'Размер задан тренировкой' : undefined"
+            >
+              <TimeSignatureControl v-model="beats" />
+            </fieldset>
             <IconSwitch v-model="metronome" label="Метроном" :hint="metronomeHint">
               <PhMetronome :size="18" weight="light" aria-hidden="true" />
             </IconSwitch>
@@ -147,6 +161,17 @@ const { playing } = props.exercise.session
   border-radius: 50%;
   background: color-mix(in srgb, var(--accent) 16%, transparent);
   color: var(--accent);
+}
+
+.bay__meter {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: none;
+}
+
+.bay__meter:disabled {
+  opacity: 0.5;
 }
 
 .bay__body {

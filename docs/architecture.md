@@ -10,8 +10,8 @@
 
 Тетрахорды: `/tetrachord-training/issue` (`IssueView`) и
 `/tetrachord-training/resolve` (`ResolveView`), обёрнуты в
-`TetrachordTrainingView`. «Нота на долю»: `/note-on-beat/issue` и
-`/note-on-beat/resolve` (`views/note-on-beat/`).
+`TetrachordTrainingView`. Конструктор: `/builder/trainings` и `/builder/edit`
+(`views/builder/`); тренировка из конструктора по ссылке — `/custom-training`.
 
 ## Слои приложения
 
@@ -20,8 +20,6 @@ src/
   router/            конфиг маршрутов
   views/             экраны верхнего уровня (TrainingsView, LabView, NotFoundView)
   views/tetrachord/  экраны тетрахордной тренировки (Issue/Resolve)
-  views/note-on-beat/
-                     экраны «Ноты на долю» (Issue/Resolve)
   components/        визуализации и сцены (SchemeCircle, TetrachordScheme,
                      ModeScheme, IntervalScheme, TabHelper/PianoHelper,
                      TrainingStage, SiteNav, ModeBackdrop)
@@ -34,6 +32,11 @@ src/
                      ExerciseConsole (Ритм / [Упражнение] / Звук + Play) на
                      ControlSheet — выдвижной панели снизу со стрелкой и
                      свайпом
+  components/builder/
+                     контролы конструктора (views/builder: ListView —
+                     сохранённые тренировки, EditView — конструктор):
+                     NotePad (октава пианино), BarRoll (такт мини-роллом),
+                     BpmRangeControl (диапазон темпа), SegmentedChoice
   components/volume/ вертикальные индикаторы громкости (VolumeBar,
                      VolumeSegments, VolumeCapsule): проп `value` 0…1
   components/pitch/  PitchRoll — ноты по Y (гибкая ось: диапазон делит высоту
@@ -43,7 +46,9 @@ src/
                      проп `trace` (PitchTrace), диапазон `low`/`high`, цели
                      `targets` (PitchTarget: старт и цепочка сегментов hold /
                      staccato / slide, одна фигура на ноту; `targetPitchAt` —
-                     какая высота нужна в момент), зона будущего `ahead` и `now` — момент на часах
+                     какая высота нужна в момент), дыхание `breaths` (BreathTarget:
+                     вдох/выдох, вуали дымки из breath.ts; `breathLoop` —
+                     по кругу для предпросмотра), зона будущего `ahead` и `now` — момент на часах
                      голоса, когда кадров нет (цели двигаются и без
                      микрофона); ноты вне диапазона —
                      тонкая линия по краю и шеврон с подсветкой, без текста
@@ -53,12 +58,21 @@ src/
                      `--loudness-*` в assets/main.css
   composables/       каркас упражнения: useExerciseSession (весь звук и
                      микрофон на одних аудиочасах), useExercise (общие
-                     настройки + сессия)
+                     настройки + сессия); useCustomTrainings — тренировки
+                     конструктора в localStorage и ссылка на них; useTrainingScore — оценка
+                     прогона собранной тренировки: после каждого такта его
+                     ноты (высота, время, громкость по зоне), итоги проходов
   training/          чистая логика без звука и DOM (tempo.ts — BPM/meter math,
                      secondsPerBeat, meterFor; keys.ts — тональные центры,
                      noteName; melody.ts — ноты мелодии; backing.ts — URL
                      бэк-треков; exercises.ts — описания упражнений;
-                     noteOnBeat.ts — логика «Ноты на долю»;
+                     builder.ts —
+                     модель конструктора: такты из нот в шестнадцатых,
+                     условия, перевод в PitchTarget, разбор черновика;
+                     customTraining.ts — упаковка тренировки в параметр
+                     `d` ссылки /custom-training и обратно;
+                     customRun.ts — прогон собранной тренировки: такты по
+                     кругу с репризами, привязка к сетке, оценка нот;
                      modeBackgrounds.ts — маппинг ладов на фоны)
   assets/audio/      бэк-треки: струнная педаль, mp3 на каждую тональность
   audio-core/        звуковой движок, см. ниже
@@ -108,7 +122,7 @@ tracks, метроном) выпилен; тренировки, которым �
         │
  ExerciseScreen + ExerciseConsole ── раскладка, консоль, Play
         │
- сцена упражнения: TrainingStage (тетрахорды), PitchRoll + цели («Нота на долю»)
+ сцена упражнения: TrainingStage (тетрахорды), PitchRoll + цели (своя тренировка)
 ```
 
 - **`useExerciseSession`** (`src/composables`) — весь звук упражнения на одном
@@ -205,16 +219,3 @@ mixolydian, aeolian, locrian.
 Если пара схем совпадает с диатоническим ладом, под карточкой всплывает имя
 (ионийский…локрийский); лидийский и локрийский в случайной выдаче не
 встречаются — им нужна схема тон-тон-тон, которой нет среди S1–S3.
-
-## Продуктовая модель («Нота на долю»)
-
-Циклы по два такта (`training/noteOnBeat.ts`): в первом такте подсказка играет
-ноту с сильной доли на две доли, во втором её нужно спеть с сильной доли и
-держать две доли. Нота — ступень мажорной гаммы тонального центра, выбирается
-детерминированно по номеру цикла и зерну, которое меняется при каждом Play.
-Оценка — через `session.scoreNotes` после конца цикла: высота в центах со
-сворачиванием в одну октаву (октава не важна), вступление в секундах. Попал —
-не дальше 50 центов и 120 мс. `PitchRoll` показывает две октавы вокруг тоники,
-4 с истории и 4 с будущего: ноты, которые нужно спеть, заранее заезжают справа;
-нота-подсказка звучит, но на графике не рисуется. У нот на графике нет видов — все
-блоки одинаковые.

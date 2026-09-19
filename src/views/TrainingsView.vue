@@ -1,5 +1,11 @@
 <script setup lang="ts">
-import { PhArrowUpRight, PhGuitar, PhMicrophone, PhSmiley, PhWaveform } from '@phosphor-icons/vue'
+import {
+  PhArrowUpRight,
+  PhGuitar,
+  PhPencilSimpleLine,
+  PhSmiley,
+  PhWaveform,
+} from '@phosphor-icons/vue'
 </script>
 
 <template>
@@ -30,22 +36,6 @@ import { PhArrowUpRight, PhGuitar, PhMicrophone, PhSmiley, PhWaveform } from '@p
         </RouterLink>
       </li>
       <li>
-        <RouterLink to="/note-on-beat/issue" class="card">
-          <span class="card__mark" aria-hidden="true">
-            <PhMicrophone :size="20" weight="light" />
-          </span>
-          <span class="card__body">
-            <span class="card__title">Нота на долю</span>
-            <span class="card__text">
-              Услышь ноту и спой её с сильной доли. Микрофон слушает высоту и время вступления.
-            </span>
-          </span>
-          <span class="card__icon" aria-hidden="true">
-            <PhArrowUpRight :size="16" weight="light" />
-          </span>
-        </RouterLink>
-      </li>
-      <li>
         <RouterLink to="/mouth-opening/issue" class="card">
           <span class="card__mark" aria-hidden="true">
             <PhSmiley :size="20" weight="light" />
@@ -53,6 +43,22 @@ import { PhArrowUpRight, PhGuitar, PhMicrophone, PhSmiley, PhWaveform } from '@p
           <span class="card__body">
             <span class="card__title">Открываем рот</span>
             <span class="card__text">Учимся открывать рот.</span>
+          </span>
+          <span class="card__icon" aria-hidden="true">
+            <PhArrowUpRight :size="16" weight="light" />
+          </span>
+        </RouterLink>
+      </li>
+      <li>
+        <RouterLink to="/builder" class="card">
+          <span class="card__mark" aria-hidden="true">
+            <PhPencilSimpleLine :size="20" weight="light" />
+          </span>
+          <span class="card__body">
+            <span class="card__title">Конструктор</span>
+            <span class="card__text">
+              Собери свою тренировку: темп, громкость, смык и ноты по тактам.
+            </span>
           </span>
           <span class="card__icon" aria-hidden="true">
             <PhArrowUpRight :size="16" weight="light" />
