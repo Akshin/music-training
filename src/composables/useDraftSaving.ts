@@ -21,22 +21,41 @@ export function useDraftSaving(
   /** The draft as last saved, to tell unsaved changes; null for a training never saved. */
   const snapshot = ref(savedId.value === undefined ? null : JSON.stringify(initial))
   const dirty = computed(() => snapshot.value !== JSON.stringify(draft.value))
-  const canSave = computed(() => hasElements.value && (snapshot.value === null || dirty.value))
+  /** A save is on its way; a second one now would add a second copy of a new training. */
+  const saving = ref(false)
+  const canSave = computed(
+    () => !saving.value && hasElements.value && (snapshot.value === null || dirty.value),
+  )
+  /** Why the last save failed, until the training changes or a save goes through. */
+  const failure = ref('')
   const state = computed(() => {
+    if (failure.value) return failure.value
     if (snapshot.value === null) return hasElements.value ? 'Не сохранена' : ''
     return dirty.value ? 'Есть несохранённые изменения' : 'Сохранена'
   })
 
   watch(draft, (value) => {
+    failure.value = ''
     if (savedId.value === undefined) store.storeNewDraft(value)
   })
 
   async function save(): Promise<void> {
+    if (saving.value) return
     const value = draft.value
-    const id = store.save(
-      { ...value, title: value.title.trim(), description: value.description.trim() },
-      savedId.value,
-    )
+    failure.value = ''
+    saving.value = true
+    let id: string
+    try {
+      id = await store.save(
+        { ...value, title: value.title.trim(), description: value.description.trim() },
+        savedId.value,
+      )
+    } catch (error) {
+      failure.value = error instanceof Error ? error.message : 'Не удалось сохранить'
+      return
+    } finally {
+      saving.value = false
+    }
     snapshot.value = JSON.stringify(value)
     if (savedId.value !== undefined) return
     savedId.value = id

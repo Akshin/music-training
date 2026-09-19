@@ -12,13 +12,19 @@
 `/tetrachord-training/resolve` (`ResolveView`), обёрнуты в
 `TetrachordTrainingView`. Конструктор: `/builder/trainings` и `/builder/edit`
 (`views/builder/`); тренировка из конструктора по ссылке — `/custom-training`.
+Вход, регистрация и сброс пароля — `/auth` (`AuthView`); профиль — `/profile`
+(`ProfileView`); аккаунт показывает `SiteNav`.
 
 ## Слои приложения
 
 ```
 src/
   router/            конфиг маршрутов
-  views/             экраны верхнего уровня (TrainingsView, LabView, NotFoundView)
+  views/             экраны верхнего уровня (TrainingsView, LabView, AuthView,
+                     ProfileView, NotFoundView)
+  lib/               клиенты внешних сервисов: supabase.ts — клиент или null;
+                     database.types.ts — типы схемы (генерируются); avatar.ts —
+                     фото в квадрат 320 px JPEG
   views/tetrachord/  экраны тетрахордной тренировки (Issue/Resolve)
   components/        визуализации и сцены (SchemeCircle, TetrachordScheme,
                      ModeScheme, IntervalScheme, TabHelper/PianoHelper,
@@ -64,8 +70,12 @@ src/
                      (черновик и правила правки), useNoteEntry (перо:
                      длительность, тип, октава), useDraftSaving
                      (сохранение, ссылка), useBuilderKeys (клавиатура);
-                     useCustomTrainings — тренировки в localStorage
-                     (конверт { version, data }) и ссылка на них; useTrainingScore — оценка
+                     useAuth — пользователь Supabase, вход/регистрация/выход,
+                     сброс пароля (состояние одно на приложение, как у
+                     useCustomTrainings); useProfile — профиль и фото;
+                     useCustomTrainings — тренировки (в аккаунте Supabase, без
+                     него — в localStorage в конверте { version, data }) и
+                     ссылка на них; useTrainingScore — оценка
                      прогона собранной тренировки: после каждого такта его
                      ноты (высота, время, громкость по зоне), итоги проходов
   training/          чистая логика без звука и DOM (tempo.ts — BPM/meter math,
@@ -75,6 +85,8 @@ src/
                      builder.ts —
                      модель конструктора: такты из нот в шестнадцатых,
                      условия, перевод в PitchTarget, разбор черновика;
+                     profile.ts — тип пользователя (ученик/учитель), пределы
+                     описания и фото;
                      customTraining.ts — упаковка тренировки в параметр
                      `d` ссылки /custom-training и обратно;
                      customRun.ts — прогон собранной тренировки: такты по
@@ -87,6 +99,10 @@ src/
                      .page-title, .page-lead), .panel, кнопки .btn, поля
                      .field
 ```
+
+Вне `src/`: `supabase/migrations/` — схема базы (`profiles`, `trainings`, бакет
+`avatars`, RLS); типы `src/lib/database.types.ts` генерируются после каждой
+миграции.
 
 ## audio-core
 

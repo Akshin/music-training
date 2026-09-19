@@ -1,4 +1,7 @@
+import { watch } from 'vue'
 import { createRouter, createWebHistory } from 'vue-router'
+import { useAuth } from '@/composables/useAuth'
+import { useCustomTrainings } from '@/composables/useCustomTrainings'
 import TrainingsView from '@/views/TrainingsView.vue'
 
 export type NavLink = {
@@ -11,6 +14,10 @@ declare module 'vue-router' {
     title?: string
     /** Pages of one training, shown in the site nav while you are inside it. */
     nav?: readonly NavLink[]
+    /** Open to a visitor who has not signed in; every other page needs an account. */
+    public?: boolean
+    /** The page reads the saved trainings, so the router waits until they are loaded. */
+    trainings?: boolean
   }
 }
 
@@ -21,7 +28,7 @@ const router = createRouter({
       path: '/',
       name: 'trainings',
       component: TrainingsView,
-      meta: { title: 'Тренировки' },
+      meta: { title: 'Тренировки', public: true },
     },
     {
       path: '/tetrachord-training',
@@ -83,6 +90,7 @@ const router = createRouter({
       path: '/builder',
       component: () => import('@/views/builder/BuilderTrainingView.vue'),
       meta: {
+        trainings: true,
         nav: [
           { to: '/builder/trainings', label: 'Мои тренировки' },
           { to: '/builder/edit', label: 'Конструктор' },
@@ -115,6 +123,19 @@ const router = createRouter({
       meta: { title: 'Своя тренировка' },
     },
     {
+      path: '/profile',
+      name: 'profile',
+      component: () => import('@/views/ProfileView.vue'),
+      meta: { title: 'Профиль' },
+    },
+    {
+      // `?next=` is where to go after signing in, `?mode=signup` opens the registration tab.
+      path: '/auth',
+      name: 'auth',
+      component: () => import('@/views/AuthView.vue'),
+      meta: { title: 'Вход', public: true },
+    },
+    {
       path: '/lab',
       name: 'lab',
       component: () => import('@/views/LabView.vue'),
@@ -124,12 +145,31 @@ const router = createRouter({
       path: '/:pathMatch(.*)*',
       name: 'not-found',
       component: () => import('@/views/NotFoundView.vue'),
-      meta: { title: 'Страницы нет' },
+      meta: { title: 'Страницы нет', public: true },
     },
   ],
   scrollBehavior() {
     return { top: 0 }
   },
+})
+
+const { user, available, whenReady } = useAuth()
+const { whenLoaded } = useCustomTrainings()
+
+// A visitor who has not signed in gets the sign-in page, and comes back to the page they asked for.
+// A build without Supabase has no accounts, so nothing is closed there.
+router.beforeEach(async (to) => {
+  if (to.meta.public || !available) return true
+  await whenReady()
+  if (!user.value) return { name: 'auth', query: { next: to.fullPath } }
+  // The builder opens a saved training by its id, so the list has to be there first.
+  if (to.meta.trainings) await whenLoaded()
+  return true
+})
+
+// Signing out on a page that needs an account leaves it.
+watch(user, (current) => {
+  if (!current && !router.currentRoute.value.meta.public) void router.replace('/')
 })
 
 router.afterEach((to) => {

@@ -1,5 +1,8 @@
-import { ref } from 'vue'
+import { ref, watch } from 'vue'
 import type { Router } from 'vue-router'
+import { useAuth } from '@/composables/useAuth'
+import type { Json } from '@/lib/database.types'
+import { supabase } from '@/lib/supabase'
 import { EMPTY_DRAFT, parseDraft, type TrainingDraft } from '@/training/builder'
 import { encodeTraining } from '@/training/customTraining'
 
@@ -16,7 +19,8 @@ const LIST_KEY = 'music-training:custom-trainings'
 const DRAFT_KEY = 'music-training:builder-draft'
 
 /**
- * Version of what is stored, written next to it as `{ version, data }`.
+ * Version of what is stored, written next to it as `{ version, data }` in `localStorage` and as the
+ * `version` column in `trainings`.
  *
  * - 0: the bare value, no envelope; bar elements as `midi` (null for a rest) and `breath`.
  * - 1: the envelope; bars hold `elements` tagged by `type`.
@@ -25,6 +29,17 @@ const DRAFT_KEY = 'music-training:builder-draft'
  * back. A newer one, from a later build of the app, is read as best it can be.
  */
 const STORAGE_VERSION = 1
+
+const FAILED_LOAD = 'Не удалось загрузить тренировки'
+const FAILED_MOVE = 'Не удалось перенести тренировки из этого браузера, попробуйте позже'
+const FAILED_SAVE = 'Не удалось сохранить: нет связи или доступа'
+const FAILED_REMOVE = 'Не удалось удалить'
+const NOT_SIGNED_IN = 'Нужно войти'
+
+/** Longest the router waits for the list before opening a page without it. */
+const LOAD_TIMEOUT_MS = 4000
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 interface Stored {
   readonly version: number
@@ -70,11 +85,115 @@ function readList(): SavedTraining[] {
   return list
 }
 
+/**
+ * Where the list lives. With Supabase it is the signed-in user's rows in `trainings`: read once
+ * after signing in, then kept in step with every save and removal, each of which waits for the
+ * database. `localStorage` then holds only what an older build saved here before there were
+ * accounts, and that moves into the first account that signs in. Without Supabase the list is
+ * `localStorage`, as it always was.
+ */
+const { user } = useAuth()
+
 /** One list for every component, so a save in the builder shows in the list at once. */
-const trainings = ref<SavedTraining[]>(readList())
+const trainings = ref<SavedTraining[]>(supabase ? [] : readList())
+/** False while the signed-in user's list is on its way; without Supabase there is nothing to wait for. */
+const loaded = ref(supabase === null)
+/** Why the list could not be read whole, or ''. */
+const loadError = ref('')
 
 function newId(): string {
-  return `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`
+  return crypto.randomUUID()
+}
+
+function fromRow(row: { id: string; draft: Json; saved_at: string }): SavedTraining | null {
+  const draft = parseDraft(row.draft)
+  return draft === null ? null : { id: row.id, savedAt: Date.parse(row.saved_at) || 0, draft }
+}
+
+function toRow(userId: string, training: SavedTraining) {
+  return {
+    id: training.id,
+    user_id: userId,
+    draft: training.draft as unknown as Json,
+    version: STORAGE_VERSION,
+    saved_at: new Date(training.savedAt).toISOString(),
+  }
+}
+
+/** Trainings an older build kept in this browser go into the account, once. */
+async function moveLocal(userId: string): Promise<void> {
+  const found = readList()
+  if (!supabase || found.length === 0) return
+  // Ids of the database's kind first, kept on disk: a second try after a lost answer then writes
+  // the same rows again instead of adding copies.
+  const list = found.map((training) =>
+    UUID.test(training.id) ? training : { ...training, id: newId() },
+  )
+  write(LIST_KEY, list)
+  const { error } = await supabase
+    .from('trainings')
+    .upsert(list.map((training) => toRow(userId, training)))
+  if (error) throw error
+  write(LIST_KEY, null)
+}
+
+async function load(userId: string): Promise<void> {
+  if (!supabase) return
+  loaded.value = false
+  loadError.value = ''
+  trainings.value = []
+  let moveFailed = false
+  try {
+    await moveLocal(userId)
+  } catch {
+    moveFailed = true
+  }
+  const { data, error } = await supabase
+    .from('trainings')
+    .select('id, draft, saved_at')
+    .order('saved_at', { ascending: false })
+  // Someone else may have signed in while this was on its way.
+  if (user.value?.id !== userId) return
+  if (error) loadError.value = FAILED_LOAD
+  else {
+    trainings.value = data.flatMap((row) => fromRow(row) ?? [])
+    if (moveFailed) loadError.value = FAILED_MOVE
+  }
+  loaded.value = true
+}
+
+if (supabase) {
+  watch(
+    user,
+    (current, before) => {
+      if (current) {
+        if (current.id !== before?.id) void load(current.id)
+      } else if (before) {
+        // Signed out: the next person on this browser sees none of it.
+        trainings.value = []
+        loaded.value = false
+        loadError.value = ''
+        write(DRAFT_KEY, null)
+      }
+    },
+    { immediate: true },
+  )
+}
+
+/** Resolves once the list is read, or after a while: the pages that need it do not hang on a slow answer. */
+function whenLoaded(): Promise<void> {
+  if (loaded.value) return Promise.resolve()
+  return new Promise((resolve) => {
+    const stop = watch(loaded, (value) => {
+      if (!value) return
+      stop()
+      resolve()
+    })
+    setTimeout(() => {
+      stop()
+      resolve()
+    }, LOAD_TIMEOUT_MS)
+  })
 }
 
 export function useCustomTrainings() {
@@ -82,17 +201,28 @@ export function useCustomTrainings() {
     return trainings.value.find((training) => training.id === id)
   }
 
-  /** Saves the training, over the saved one with `id` or as a new one; returns its id. */
-  function save(draft: TrainingDraft, id?: string): string {
+  /** Saves the training, over the saved one with `id` or as a new one; returns its id. Rejects with a message to show. */
+  async function save(draft: TrainingDraft, id?: string): Promise<string> {
     const saved: SavedTraining = { id: id ?? newId(), savedAt: Date.now(), draft }
+    if (supabase) {
+      const userId = user.value?.id
+      if (!userId) throw new Error(NOT_SIGNED_IN)
+      const { error } = await supabase.from('trainings').upsert(toRow(userId, saved))
+      if (error) throw new Error(FAILED_SAVE)
+    }
     trainings.value = [saved, ...trainings.value.filter((training) => training.id !== saved.id)]
-    write(LIST_KEY, trainings.value)
+    if (!supabase) write(LIST_KEY, trainings.value)
     return saved.id
   }
 
-  function remove(id: string): void {
+  /** Rejects with a message to show. */
+  async function remove(id: string): Promise<void> {
+    if (supabase) {
+      const { error } = await supabase.from('trainings').delete().eq('id', id)
+      if (error) throw new Error(FAILED_REMOVE)
+    }
     trainings.value = trainings.value.filter((training) => training.id !== id)
-    write(LIST_KEY, trainings.value)
+    if (!supabase) write(LIST_KEY, trainings.value)
   }
 
   function loadNewDraft(): TrainingDraft {
@@ -103,7 +233,19 @@ export function useCustomTrainings() {
     write(DRAFT_KEY, draft)
   }
 
-  return { trainings, find, save, remove, loadNewDraft, storeNewDraft }
+  return {
+    trainings,
+    loaded,
+    loadError,
+    /** Whether the list follows the account (Supabase) rather than this browser alone. */
+    synced: supabase !== null,
+    find,
+    save,
+    remove,
+    whenLoaded,
+    loadNewDraft,
+    storeNewDraft,
+  }
 }
 
 /** Full link to play the training: `{origin}{base}custom-training?d=…`. */

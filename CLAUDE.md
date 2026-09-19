@@ -17,6 +17,10 @@ Vitest (тесты движка).
 - `src/views`, `src/views/tetrachord` — экраны
 - `src/components` — UI-контролы и визуализации схем
 - `src/training` — чистая логика тренировок без звука (напр. `tempo.ts`)
+- `src/lib` — клиенты внешних сервисов; `supabase.ts` — клиент Supabase или
+  `null`, если в сборке нет `VITE_SUPABASE_*` (см. `.env.example`)
+- `supabase/migrations` — схема базы (профили, тренировки, RLS); после
+  миграции перегенерировать `src/lib/database.types.ts`
 - `src/audio-core` — платформонезависимый звуковой движок
   (capture → analysis → scoring → synthesis), подключается как
   `@audio-core/*`; собственные архитектурные правила —

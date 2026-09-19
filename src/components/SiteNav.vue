@@ -1,8 +1,13 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
+import { PhHouse, PhSignOut, PhUserCircle } from '@phosphor-icons/vue'
+import { useAuth } from '@/composables/useAuth'
+import { useProfile } from '@/composables/useProfile'
 
 const route = useRoute()
+const { user, ready, available, signOut } = useAuth()
+const { avatarUrl } = useProfile()
 const onHome = computed(() => route.path === '/')
 const links = computed(() => route.meta.nav ?? [])
 </script>
@@ -11,7 +16,8 @@ const links = computed(() => route.meta.nav ?? [])
   <header class="nav-wrap">
     <nav class="nav" aria-label="Основное">
       <RouterLink to="/" class="nav__brand" :aria-current="onHome ? 'page' : undefined">
-        Тренировки
+        <PhHouse class="nav__brand-icon" :size="18" weight="light" aria-hidden="true" />
+        <span class="nav__brand-label">Тренировки</span>
       </RouterLink>
       <RouterLink
         v-for="link in links"
@@ -22,6 +28,27 @@ const links = computed(() => route.meta.nav ?? [])
       >
         {{ link.label }}
       </RouterLink>
+      <template v-if="available && ready">
+        <!-- Every other page needs an account, so only the home page has a visitor to invite. -->
+        <RouterLink v-if="!user && onHome" to="/auth" class="nav__link nav__account">
+          <PhUserCircle :size="18" weight="light" aria-hidden="true" />
+          <span class="nav__account-label">Войти</span>
+        </RouterLink>
+        <div v-else-if="user" class="nav__user">
+          <RouterLink
+            to="/profile"
+            class="nav__link nav__account"
+            :aria-current="route.path === '/profile' ? 'page' : undefined"
+          >
+            <img v-if="avatarUrl" :src="avatarUrl" alt="" class="nav__avatar" />
+            <PhUserCircle v-else :size="18" weight="light" aria-hidden="true" />
+            <span class="nav__account-label nav__email">{{ user.email ?? 'Аккаунт' }}</span>
+          </RouterLink>
+          <button type="button" class="nav__out" aria-label="Выйти" @click="signOut">
+            <PhSignOut :size="18" weight="light" aria-hidden="true" />
+          </button>
+        </div>
+      </template>
     </nav>
   </header>
 </template>
@@ -84,8 +111,80 @@ const links = computed(() => route.meta.nav ?? [])
 }
 
 .nav__link:focus-visible,
-.nav__brand:focus-visible {
+.nav__brand:focus-visible,
+.nav__out:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 3px;
+}
+
+.nav__account {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.nav__avatar {
+  width: 1.4rem;
+  height: 1.4rem;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.nav__user {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.nav__email {
+  max-width: 11rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nav__out {
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  transition: color 420ms var(--ease);
+}
+
+.nav__out:hover {
+  color: var(--ink);
+}
+
+.nav__brand-icon {
+  display: none;
+}
+
+/* The pill is tight on a phone: the home and account links show as icons, the words stay for screen readers. */
+@media (max-width: 600px) {
+  .nav {
+    gap: 1rem;
+  }
+
+  .nav__brand-icon {
+    display: block;
+  }
+
+  /* Signing out stays one tap away on the profile page. */
+  .nav__out {
+    display: none;
+  }
+
+  .nav__brand-label,
+  .nav__account-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
 }
 </style>

@@ -26,7 +26,10 @@ const PREVIEW_BARS = 4
 const COPIED_MS = 2000
 
 const router = useRouter()
-const { trainings, remove } = useCustomTrainings()
+const { trainings, remove, synced, loadError } = useCustomTrainings()
+
+/** Why the last removal failed, or ''. */
+const removeError = ref('')
 
 function summary(draft: TrainingDraft): string[] {
   const bars = draft.bars.length
@@ -85,9 +88,15 @@ async function share(training: SavedTraining) {
   }
 }
 
-function confirmRemove(training: SavedTraining) {
+async function confirmRemove(training: SavedTraining) {
   const name = training.draft.title || 'Без названия'
-  if (window.confirm(`Удалить тренировку «${name}»?`)) remove(training.id)
+  if (!window.confirm(`Удалить тренировку «${name}»?`)) return
+  removeError.value = ''
+  try {
+    await remove(training.id)
+  } catch (error) {
+    removeError.value = error instanceof Error ? error.message : 'Не удалось удалить'
+  }
 }
 </script>
 
@@ -97,13 +106,21 @@ function confirmRemove(training: SavedTraining) {
       <p class="kicker">Конструктор</p>
       <h1 class="page-title">Мои тренировки</h1>
       <p class="page-lead">
-        Тренировки, собранные в конструкторе. Хранятся в этом браузере; чтобы поделиться — возьми
-        ссылку.
+        Тренировки, собранные в конструкторе.
+        {{
+          synced
+            ? 'Хранятся в твоём аккаунте и есть на любом устройстве;'
+            : 'Хранятся в этом браузере;'
+        }}
+        чтобы поделиться — возьми ссылку.
       </p>
       <RouterLink to="/builder/edit" class="start">
         <PhPlus :size="16" weight="bold" aria-hidden="true" />
         Новая тренировка
       </RouterLink>
+      <p v-if="loadError || removeError" class="notice" role="alert">
+        {{ removeError || loadError }}
+      </p>
     </section>
 
     <TransitionGroup v-if="trainings.length" tag="ul" name="item" class="list">
@@ -189,6 +206,16 @@ function confirmRemove(training: SavedTraining) {
 <style scoped>
 .page-lead {
   margin-bottom: 1.5rem;
+}
+
+.notice {
+  margin: 1rem 0 0;
+  padding: 0.6rem 0.85rem;
+  border: 1px solid var(--tonic);
+  border-radius: 0.8rem;
+  background: color-mix(in srgb, var(--tonic) 22%, var(--bg-inset));
+  font-size: 0.88rem;
+  line-height: 1.45;
 }
 
 .start {
