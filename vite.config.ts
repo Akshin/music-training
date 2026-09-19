@@ -5,12 +5,13 @@ import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 // import vueDevTools from 'vite-plugin-vue-devtools'
 
-const repoBase = '/music-training/'
+// Path the build is served under. The site root by default; GitHub Pages serves the project at
+// https://akshin.github.io/music-training/, so its workflow sets BASE_PATH=/music-training/.
+const buildBase = process.env.BASE_PATH || '/'
 
 // https://vite.dev/config/
 export default defineConfig(({ command }) => ({
-  // Project Pages URL: https://akshin.github.io/music-training/
-  base: command === 'build' ? repoBase : '/',
+  base: command === 'build' ? buildBase : '/',
   plugins: [
     vue(),
     // vueDevTools(),
