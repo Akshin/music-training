@@ -13,6 +13,7 @@ import {
   LOUDNESS_ZONES,
   ONSETS,
   lastPitch,
+  pitchOf,
   pitchSpan,
   previewBpm,
   type TrainingDraft,
@@ -47,14 +48,14 @@ function summary(draft: TrainingDraft): string[] {
 }
 
 function spanOf(draft: TrainingDraft) {
-  const found = pitchSpan(draft.bars.slice(0, PREVIEW_BARS).flatMap((bar) => bar.notes))
+  const found = pitchSpan(draft.bars.slice(0, PREVIEW_BARS).flatMap((bar) => bar.elements))
   return found ? { low: found.low - 1, high: found.high + 1 } : { low: 59, high: 73 }
 }
 
 /** The first note after bar `index` (`side` 1) or the last pitch before it (`side` −1). */
 function midiAround(draft: TrainingDraft, index: number, side: 1 | -1): number | null {
-  if (side === 1) return draft.bars[index + 1]?.notes[0]?.midi ?? null
-  const earlier = draft.bars.slice(0, index).flatMap((bar) => bar.notes)
+  if (side === 1) return pitchOf(draft.bars[index + 1]?.elements[0])
+  const earlier = draft.bars.slice(0, index).flatMap((bar) => bar.elements)
   return lastPitch(earlier)
 }
 
@@ -91,11 +92,11 @@ function confirmRemove(training: SavedTraining) {
 </script>
 
 <template>
-  <main id="main" class="list-page">
-    <section class="head">
+  <main id="main" class="page">
+    <section class="page-head">
       <p class="kicker">Конструктор</p>
-      <h1 class="head__title">Мои тренировки</h1>
-      <p class="head__lead">
+      <h1 class="page-title">Мои тренировки</h1>
+      <p class="page-lead">
         Тренировки, собранные в конструкторе. Хранятся в этом браузере; чтобы поделиться — возьми
         ссылку.
       </p>
@@ -128,7 +129,7 @@ function confirmRemove(training: SavedTraining) {
             class="item__bar"
           >
             <BarRoll
-              :notes="bar.notes"
+              :elements="bar.elements"
               :beats="training.draft.beats"
               :bpm="previewBpm(training.draft)"
               :prev-midi="midiAround(training.draft, index, -1)"
@@ -144,13 +145,13 @@ function confirmRemove(training: SavedTraining) {
         <p v-else class="item__empty">Тактов пока нет.</p>
 
         <div class="item__actions">
-          <RouterLink :to="{ path: '/builder/edit', query: { id: training.id } }" class="action">
+          <RouterLink :to="{ path: '/builder/edit', query: { id: training.id } }" class="btn">
             <PhPencilSimple :size="15" weight="light" aria-hidden="true" />
             Редактировать
           </RouterLink>
           <button
             type="button"
-            class="action"
+            class="btn"
             :disabled="training.draft.bars.length === 0"
             @click="share(training)"
           >
@@ -162,7 +163,7 @@ function confirmRemove(training: SavedTraining) {
             />
             {{ copied === training.id ? 'Скопировано' : 'Ссылка' }}
           </button>
-          <button type="button" class="action action--danger" @click="confirmRemove(training)">
+          <button type="button" class="btn btn--danger delete" @click="confirmRemove(training)">
             <PhTrash :size="15" weight="light" aria-hidden="true" />
             Удалить
           </button>
@@ -186,40 +187,8 @@ function confirmRemove(training: SavedTraining) {
 </template>
 
 <style scoped>
-.list-page {
-  max-width: 56rem;
-  margin: 0 auto;
-  padding: 0 1rem 5rem;
-}
-
-.head {
-  padding: 4rem 0 2rem;
-}
-
-.kicker {
-  margin: 0 0 0.75rem;
-  font-size: 0.72rem;
-  font-weight: 600;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: var(--muted);
-}
-
-.head__title {
-  margin: 0 0 0.85rem;
-  font-size: clamp(2rem, 4.6vw, 3.2rem);
-  font-weight: 600;
-  letter-spacing: -0.045em;
-  line-height: 1.1;
-}
-
-.head__lead {
-  margin: 0 0 1.5rem;
-  max-width: 50ch;
-  color: var(--muted);
-  font-size: 1.05rem;
-  line-height: 1.55;
-  text-wrap: pretty;
+.page-lead {
+  margin-bottom: 1.5rem;
 }
 
 .start {
@@ -350,48 +319,9 @@ function confirmRemove(training: SavedTraining) {
   border-color: var(--accent);
 }
 
-.action {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  height: 2.2rem;
-  padding: 0 0.95rem;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-pill);
-  background: var(--bg-inset);
-  color: var(--ink);
-  font-size: 0.83rem;
-  font-weight: 600;
-  text-decoration: none;
-  cursor: pointer;
-  transition:
-    border-color 280ms var(--ease),
-    background 280ms var(--ease);
-}
-
-.action:hover:not(:disabled) {
-  border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
-}
-
-.action:disabled {
-  cursor: not-allowed;
-  opacity: 0.4;
-}
-
-.action:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
-
-.action--danger {
+.delete {
   margin-left: auto;
   color: var(--muted);
-}
-
-.action--danger:hover:not(:disabled) {
-  border-color: var(--tonic);
-  background: color-mix(in srgb, var(--tonic) 25%, var(--bg-inset));
-  color: var(--ink);
 }
 
 .empty {
@@ -425,7 +355,7 @@ function confirmRemove(training: SavedTraining) {
     padding: 1.1rem 1rem;
   }
 
-  .action--danger {
+  .delete {
     margin-left: 0;
   }
 }

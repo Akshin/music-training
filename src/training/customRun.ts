@@ -9,8 +9,11 @@ import {
   LOUDNESS_ZONES,
   breathAnchor,
   expandBars,
+  isBreath,
+  isNote,
+  pitchOf,
   sixteenthsPerBeat,
-  type BuilderNote,
+  type BarElement,
   type LoudnessZone,
   type TrainingDraft,
 } from '@/training/builder'
@@ -24,7 +27,7 @@ export const RHYTHM_TOLERANCE_SECONDS = 0.12
 
 /** One element of the training laid out in time: a note, a rest or a breath. */
 export interface RunElement {
-  readonly note: BuilderNote
+  readonly element: BarElement
   /** Bar of the unrolled training it is in, 0-based. */
   readonly bar: number
   /** Beats from the start of its bar. */
@@ -48,37 +51,36 @@ export interface RunPlan {
 
 export function planRun(draft: TrainingDraft): RunPlan {
   const played = expandBars(
-    draft.bars.map((bar) => bar.notes),
+    draft.bars.map((bar) => bar.elements),
     draft.repeats,
   )
   const perBeat = sixteenthsPerBeat(draft.beats)
-  const flat = played.flatMap((notes, bar) => notes.map((note) => ({ note, bar })))
-  const notes = flat.map((item) => item.note)
+  const flat = played.flatMap((elements, bar) => elements.map((element) => ({ element, bar })))
+  const elements = flat.map((item) => item.element)
   const byBar: RunElement[][] = played.map(() => [])
   let at = 0
   let barStart = 0
   let currentBar = 0
-  flat.forEach(({ note, bar }, index) => {
+  flat.forEach(({ element, bar }, index) => {
     if (bar !== currentBar) {
       currentBar = bar
       barStart = at
     }
-    const following = notes[(index + 1) % notes.length]
     byBar[bar]!.push({
-      note,
+      element,
       bar,
       offset: (at - barStart) / perBeat,
-      beats: note.sixteenths / perBeat,
-      next: following?.midi ?? null,
-      anchor: note.breath ? breathAnchor(notes, index) : null,
+      beats: element.sixteenths / perBeat,
+      next: pitchOf(elements[(index + 1) % elements.length]),
+      anchor: isBreath(element) ? breathAnchor(elements, index) : null,
     })
-    at += note.sixteenths
+    at += element.sixteenths
   })
   return {
     bars: played.length,
     beatsPerBar: draft.beats,
     byBar,
-    noteCount: notes.filter((note) => note.midi !== null).length,
+    noteCount: elements.filter(isNote).length,
   }
 }
 
@@ -96,17 +98,10 @@ export function runBarElements(plan: RunPlan, sequence: number): readonly RunEle
 /** The pitched notes of training bar `sequence` as note events on the clock. */
 export function runBarNotes(plan: RunPlan, sequence: number, velocity = 1): NoteEvent[] {
   const start = runBarBeat(plan, sequence)
-  return runBarElements(plan, sequence).flatMap((element) =>
-    element.note.midi === null
-      ? []
-      : [
-          {
-            midi: element.note.midi,
-            startBeat: start + element.offset,
-            durationBeats: element.beats,
-            velocity,
-          },
-        ],
+  return runBarElements(plan, sequence).flatMap(({ element, offset, beats }) =>
+    isNote(element)
+      ? [{ midi: element.midi, startBeat: start + offset, durationBeats: beats, velocity }]
+      : [],
   )
 }
 

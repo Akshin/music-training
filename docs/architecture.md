@@ -33,10 +33,12 @@ src/
                      ControlSheet — выдвижной панели снизу со стрелкой и
                      свайпом
   components/builder/
-                     контролы конструктора (views/builder: ListView —
-                     сохранённые тренировки, EditView — конструктор):
-                     NotePad (октава пианино), BarRoll (такт мини-роллом),
-                     BpmRangeControl (диапазон темпа), SegmentedChoice
+                     конструктор (views/builder: ListView — сохранённые
+                     тренировки, EditView — сборка панелей и полёт такта в
+                     таймлайн): панели AboutPanel, ConditionsPanel,
+                     BarEntryPanel (такт + ввод), TimelinePanel (такты,
+                     репризы); контролы NotePad (октава пианино), BarRoll
+                     (такт мини-роллом), BpmRangeControl, SegmentedChoice
   components/volume/ вертикальные индикаторы громкости (VolumeBar,
                      VolumeSegments, VolumeCapsule): проп `value` 0…1
   components/pitch/  PitchRoll — ноты по Y (гибкая ось: диапазон делит высоту
@@ -58,8 +60,12 @@ src/
                      `--loudness-*` в assets/main.css
   composables/       каркас упражнения: useExerciseSession (весь звук и
                      микрофон на одних аудиочасах), useExercise (общие
-                     настройки + сессия); useCustomTrainings — тренировки
-                     конструктора в localStorage и ссылка на них; useTrainingScore — оценка
+                     настройки + сессия); конструктор: useBuilderDraft
+                     (черновик и правила правки), useNoteEntry (перо:
+                     длительность, тип, октава), useDraftSaving
+                     (сохранение, ссылка), useBuilderKeys (клавиатура);
+                     useCustomTrainings — тренировки в localStorage
+                     (конверт { version, data }) и ссылка на них; useTrainingScore — оценка
                      прогона собранной тренировки: после каждого такта его
                      ноты (высота, время, громкость по зоне), итоги проходов
   training/          чистая логика без звука и DOM (tempo.ts — BPM/meter math,
@@ -76,7 +82,10 @@ src/
                      modeBackgrounds.ts — маппинг ладов на фоны)
   assets/audio/      бэк-треки: струнная педаль, mp3 на каждую тональность
   audio-core/        звуковой движок, см. ниже
-  assets/            статика (bg/ — фоны по ладам)
+  assets/            статика (bg/ — фоны по ладам); main.css — токены темы и
+                     общие классы: страница (.page, .page-head, .kicker,
+                     .page-title, .page-lead), .panel, кнопки .btn, поля
+                     .field
 ```
 
 ## audio-core

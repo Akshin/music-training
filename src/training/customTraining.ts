@@ -11,19 +11,22 @@ import {
   NOTE_LENGTHS,
   ONSETS,
   parseDraft,
-  type BuilderNote,
+  type BarElement,
+  type ElementType,
   type TrainingDraft,
 } from '@/training/builder'
 
 const VERSION = 1
-/** Pitch fields past MIDI for elements with no pitch. */
-const REST = 128
-const INHALE = 129
-const EXHALE = 130
+/** Pitch fields past MIDI for the elements with no pitch. */
+const PITCHLESS: Record<Exclude<ElementType, 'note'>, number> = {
+  rest: 128,
+  inhale: 129,
+  exhale: 130,
+}
 
 /**
  * `[version, title, bpmMin, bpmMax, loudness, beats, onset, bars]`: a free tempo is `0, 0`, free
- * loudness `-1`, loudness and onset are indexes into their option lists, and each note is one
+ * loudness `-1`, loudness and onset are indexes into their option lists, and each element is one
  * number, `pitch * 64 + length * 8 + kind`, with length and kind as indexes too; a rest, an inhale
  * and an exhale take pitches 128, 129 and 130. Then, if there are any, reprises as flat
  * `[from, to, times, …]` and the description; links made before them simply end earlier.
@@ -33,21 +36,23 @@ type Payload =
   | [number, string, number, number, number, number, number, number[][], number[]]
   | [number, string, number, number, number, number, number, number[][], number[], string]
 
-function packNote(note: BuilderNote): number {
-  const length = NOTE_LENGTHS.findIndex((option) => option.sixteenths === note.sixteenths)
-  const kind = NOTE_KINDS.findIndex((option) => option.kind === note.kind)
-  const pitch = note.breath === 'inhale' ? INHALE : note.breath === 'exhale' ? EXHALE : note.midi
-  return (pitch ?? REST) * 64 + Math.max(0, length) * 8 + Math.max(0, kind)
+function packElement(element: BarElement): number {
+  const length = NOTE_LENGTHS.findIndex((option) => option.sixteenths === element.sixteenths)
+  if (element.type !== 'note') return PITCHLESS[element.type] * 64 + Math.max(0, length) * 8
+  const kind = NOTE_KINDS.findIndex((option) => option.kind === element.kind)
+  return element.midi * 64 + Math.max(0, length) * 8 + Math.max(0, kind)
 }
 
-function unpackNote(code: number): Record<string, unknown> {
+/** An element as `parseDraft` reads it; unknown pitch fields past MIDI read as rests. */
+function unpackElement(code: number): Record<string, unknown> {
   const pitch = Math.floor(code / 64)
-  return {
-    midi: pitch >= REST ? null : pitch,
-    breath: pitch === INHALE ? 'inhale' : pitch === EXHALE ? 'exhale' : undefined,
-    sixteenths: NOTE_LENGTHS[Math.floor(code / 8) % 8]?.sixteenths,
-    kind: NOTE_KINDS[code % 8]?.kind,
+  const sixteenths = NOTE_LENGTHS[Math.floor(code / 8) % 8]?.sixteenths
+  if (pitch < PITCHLESS.rest) {
+    return { type: 'note', midi: pitch, kind: NOTE_KINDS[code % 8]?.kind, sixteenths }
   }
+  const type =
+    pitch === PITCHLESS.inhale ? 'inhale' : pitch === PITCHLESS.exhale ? 'exhale' : 'rest'
+  return { type, sixteenths }
 }
 
 export function toPayload(draft: TrainingDraft): Payload {
@@ -59,7 +64,7 @@ export function toPayload(draft: TrainingDraft): Payload {
     LOUDNESS_ZONES.findIndex((option) => option.zone === draft.loudness),
     draft.beats,
     ONSETS.findIndex((option) => option.onset === draft.onset),
-    draft.bars.map((bar) => bar.notes.map(packNote)),
+    draft.bars.map((bar) => bar.elements.map(packElement)),
   ]
   const repeats = draft.repeats.flatMap((repeat) => [repeat.from, repeat.to, repeat.times])
   if (draft.description !== '') return [...payload, repeats, draft.description]
@@ -80,9 +85,9 @@ export function fromPayload(value: unknown): TrainingDraft | null {
     beats,
     onset: typeof onset === 'number' ? ONSETS[onset]?.onset : undefined,
     bars: Array.isArray(bars)
-      ? bars.map((notes) => ({
-          notes: Array.isArray(notes)
-            ? notes.filter((code) => Number.isInteger(code) && code >= 0).map(unpackNote)
+      ? bars.map((codes) => ({
+          elements: Array.isArray(codes)
+            ? codes.filter((code) => Number.isInteger(code) && code >= 0).map(unpackElement)
             : [],
         }))
       : [],

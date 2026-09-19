@@ -307,15 +307,6 @@ const demoCountdown = `${(secondsPerBeat(BPM_DEFAULT) * BEATS_DEFAULT * CHANGE_E
   }
 }
 
-.kicker {
-  margin: 0 0 0.75rem;
-  font-size: 0.72rem;
-  font-weight: 600;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: var(--muted);
-}
-
 .hero__title {
   margin: 0 0 0.85rem;
   font-size: clamp(2.1rem, 5.4vw, 3.7rem);

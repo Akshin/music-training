@@ -15,19 +15,41 @@ const LIST_KEY = 'music-training:custom-trainings'
 /** The unsaved new training in the builder, so a reload does not lose it. */
 const DRAFT_KEY = 'music-training:builder-draft'
 
-function read(key: string): unknown {
+/**
+ * Version of what is stored, written next to it as `{ version, data }`.
+ *
+ * - 0: the bare value, no envelope; bar elements as `midi` (null for a rest) and `breath`.
+ * - 1: the envelope; bars hold `elements` tagged by `type`.
+ *
+ * `parseDraft` reads every version, so an older value is upgraded by reading it and writing it
+ * back. A newer one, from a later build of the app, is read as best it can be.
+ */
+const STORAGE_VERSION = 1
+
+interface Stored {
+  readonly version: number
+  readonly data: unknown
+}
+
+function read(key: string): Stored | null {
   try {
-    const stored = localStorage.getItem(key)
-    return stored === null ? null : JSON.parse(stored)
+    const text = localStorage.getItem(key)
+    if (text === null) return null
+    const value: unknown = JSON.parse(text)
+    const envelope = value as Partial<Stored> | null
+    if (typeof envelope?.version === 'number' && 'data' in envelope) {
+      return { version: envelope.version, data: envelope.data }
+    }
+    return { version: 0, data: value }
   } catch {
     return null
   }
 }
 
-function write(key: string, value: unknown): void {
+function write(key: string, data: unknown): void {
   try {
-    if (value === null) localStorage.removeItem(key)
-    else localStorage.setItem(key, JSON.stringify(value))
+    if (data === null) localStorage.removeItem(key)
+    else localStorage.setItem(key, JSON.stringify({ version: STORAGE_VERSION, data }))
   } catch {
     // Storage off or full: nothing is kept past the page.
   }
@@ -35,15 +57,17 @@ function write(key: string, value: unknown): void {
 
 function readList(): SavedTraining[] {
   const stored = read(LIST_KEY)
-  if (!Array.isArray(stored)) return []
+  if (stored === null || !Array.isArray(stored.data)) return []
   const list: SavedTraining[] = []
-  for (const item of stored) {
+  for (const item of stored.data) {
     const record = item as Partial<Record<keyof SavedTraining, unknown>> | null
     const draft = parseDraft(record?.draft)
     if (typeof record?.id !== 'string' || draft === null) continue
     list.push({ id: record.id, savedAt: Number(record.savedAt) || 0, draft })
   }
-  return list.sort((a, b) => b.savedAt - a.savedAt)
+  list.sort((a, b) => b.savedAt - a.savedAt)
+  if (stored.version < STORAGE_VERSION) write(LIST_KEY, list)
+  return list
 }
 
 /** One list for every component, so a save in the builder shows in the list at once. */
@@ -72,7 +96,7 @@ export function useCustomTrainings() {
   }
 
   function loadNewDraft(): TrainingDraft {
-    return parseDraft(read(DRAFT_KEY)) ?? EMPTY_DRAFT
+    return parseDraft(read(DRAFT_KEY)?.data) ?? EMPTY_DRAFT
   }
 
   function storeNewDraft(draft: TrainingDraft | null): void {

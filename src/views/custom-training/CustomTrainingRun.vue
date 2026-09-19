@@ -15,6 +15,8 @@ import {
   LOUDNESS_ZONES,
   ONSETS,
   expandBars,
+  isBreath,
+  isNote,
   noteSegments,
   pitchSpan,
   previewBpm,
@@ -147,7 +149,7 @@ const { passes, currentPass, last } = useTrainingScore({
 // ---- The chart: notes and breaths around now, on the trace clock ----
 
 const span = computed(() => {
-  const found = pitchSpan(draft.bars.flatMap((bar) => bar.notes))
+  const found = pitchSpan(draft.bars.flatMap((bar) => bar.elements))
   const middle = found ? Math.round((found.low + found.high) / 2) : 64
   return {
     low: Math.min(found?.low ?? middle, middle - 6) - 2,
@@ -161,7 +163,7 @@ const PREVIEW_LEAD = 0.5
 /** Before Play the chart shows how the training starts, breaths moving on their own. */
 const preview = computed(() => {
   const played = expandBars(
-    draft.bars.map((bar) => bar.notes),
+    draft.bars.map((bar) => bar.elements),
     draft.repeats,
   )
   const bpm = settings.bpm.value
@@ -180,23 +182,18 @@ const chart = computed(() => {
   const { grid } = at
   for (let bar = Math.max(0, sequence.value - 1); bar <= sequence.value + 2; bar++) {
     const barStart = runBarBeat(plan, bar)
-    for (const element of runBarElements(plan, bar)) {
-      const beat = barStart + element.offset
+    for (const { element, offset, beats, next, anchor } of runBarElements(plan, bar)) {
+      const beat = barStart + offset
       const start = session.traceTimeOf(grid.beatToSeconds(beat))
-      const end = session.traceTimeOf(grid.beatToSeconds(beat + element.beats))
+      const end = session.traceTimeOf(grid.beatToSeconds(beat + beats))
       if (start === null || end === null) continue
-      if (element.note.breath) {
-        breaths.push({
-          kind: element.note.breath,
-          start,
-          duration: end - start,
-          midi: element.anchor,
-        })
-      } else if (element.note.midi !== null) {
+      if (isBreath(element)) {
+        breaths.push({ kind: element.type, start, duration: end - start, midi: anchor })
+      } else if (isNote(element)) {
         targets.push({
-          midi: element.note.midi,
+          midi: element.midi,
           start,
-          segments: noteSegments(element.note, end - start, element.next),
+          segments: noteSegments(element, end - start, next),
         })
       }
     }

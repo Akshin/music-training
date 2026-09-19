@@ -26,55 +26,25 @@ watchEffect(async () => {
     :key="String($route.query.d)"
     :draft="training"
   />
-  <main v-else id="main" class="custom">
-    <p class="kicker">Тренировка по ссылке</p>
-    <h1 class="head__title">
-      {{
-        state === 'loading'
-          ? 'Открываю…'
-          : state === 'empty'
-            ? training?.title || 'Пустая тренировка'
-            : 'Ссылка не открылась'
-      }}
-    </h1>
-    <p v-if="state === 'broken'" class="lead">
-      В ссылке нет тренировки или она обрезана. Попроси ссылку ещё раз или собери свою в
-      <RouterLink to="/builder/edit">конструкторе</RouterLink>.
-    </p>
-    <p v-else-if="state === 'empty'" class="lead">В этой тренировке пока нет ни одного такта.</p>
+  <main v-else id="main" class="page">
+    <section class="page-head">
+      <p class="kicker">Тренировка по ссылке</p>
+      <h1 class="page-title">
+        {{
+          state === 'loading'
+            ? 'Открываю…'
+            : state === 'empty'
+              ? training?.title || 'Пустая тренировка'
+              : 'Ссылка не открылась'
+        }}
+      </h1>
+      <p v-if="state === 'broken'" class="page-lead">
+        В ссылке нет тренировки или она обрезана. Попроси ссылку ещё раз или собери свою в
+        <RouterLink to="/builder/edit">конструкторе</RouterLink>.
+      </p>
+      <p v-else-if="state === 'empty'" class="page-lead">
+        В этой тренировке пока нет ни одного такта.
+      </p>
+    </section>
   </main>
 </template>
-
-<style scoped>
-.custom {
-  max-width: 56rem;
-  margin: 0 auto;
-  padding: 4rem 1rem 5rem;
-}
-
-.kicker {
-  margin: 0 0 0.75rem;
-  font-size: 0.72rem;
-  font-weight: 600;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: var(--muted);
-}
-
-.head__title {
-  margin: 0 0 0.85rem;
-  font-size: clamp(2rem, 4.6vw, 3.2rem);
-  font-weight: 600;
-  letter-spacing: -0.045em;
-  line-height: 1.1;
-  text-wrap: balance;
-}
-
-.lead {
-  max-width: 50ch;
-  margin: 0;
-  color: var(--muted);
-  font-size: 1.05rem;
-  line-height: 1.55;
-}
-</style>

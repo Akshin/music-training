@@ -3,10 +3,10 @@ import { PhArrowUpRight } from '@phosphor-icons/vue'
 </script>
 
 <template>
-  <main id="main" class="issue">
-    <section class="head">
+  <main id="main" class="page">
+    <section class="page-head">
       <p class="kicker">Открываем рот</p>
-      <h1 class="head__title">Учимся открывать рот</h1>
+      <h1 class="page-title">Учимся открывать рот</h1>
     </section>
 
     <RouterLink to="/mouth-opening/resolve" class="start">
@@ -17,34 +17,6 @@ import { PhArrowUpRight } from '@phosphor-icons/vue'
 </template>
 
 <style scoped>
-.issue {
-  max-width: 56rem;
-  margin: 0 auto;
-  padding: 0 1rem 5rem;
-}
-
-.head {
-  padding: 4rem 0 2.5rem;
-}
-
-.kicker {
-  margin: 0 0 0.75rem;
-  font-size: 0.72rem;
-  font-weight: 600;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: var(--muted);
-}
-
-.head__title {
-  margin: 0;
-  font-size: clamp(2rem, 4.6vw, 3.2rem);
-  font-weight: 600;
-  letter-spacing: -0.045em;
-  line-height: 1.1;
-  text-wrap: balance;
-}
-
 .start {
   display: inline-flex;
   align-items: center;

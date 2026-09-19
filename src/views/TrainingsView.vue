@@ -9,11 +9,11 @@ import {
 </script>
 
 <template>
-  <main id="main" class="trainings">
-    <section class="head">
+  <main id="main" class="page">
+    <section class="page-head">
       <p class="kicker">Тренировки</p>
-      <h1 class="head__title">Слух и руки, по одной тренировке за раз</h1>
-      <p class="head__lead">
+      <h1 class="page-title">Слух и руки, по одной тренировке за раз</h1>
+      <p class="page-lead">
         Каждая тренировка — своя страница: сначала описание, потом сам прогон под пульс.
       </p>
     </section>
@@ -86,43 +86,6 @@ import {
 </template>
 
 <style scoped>
-.trainings {
-  max-width: 56rem;
-  margin: 0 auto;
-  padding: 0 1rem 5rem;
-}
-
-.head {
-  padding: 4rem 0 2.5rem;
-}
-
-.kicker {
-  margin: 0 0 0.75rem;
-  font-size: 0.72rem;
-  font-weight: 600;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: var(--muted);
-}
-
-.head__title {
-  margin: 0 0 0.85rem;
-  font-size: clamp(2rem, 4.6vw, 3.2rem);
-  font-weight: 600;
-  letter-spacing: -0.045em;
-  line-height: 1.1;
-  text-wrap: balance;
-}
-
-.head__lead {
-  margin: 0;
-  max-width: 46ch;
-  color: var(--muted);
-  font-size: 1.05rem;
-  line-height: 1.55;
-  text-wrap: pretty;
-}
-
 .list {
   display: grid;
   gap: 0.85rem;

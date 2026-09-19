@@ -6,12 +6,22 @@ import {
   rgbChannels,
   type BreathTarget,
 } from '@/components/pitch/breath'
-import { barCapacity, breathAnchor, sixteenthsPerBeat, type BuilderNote } from '@/training/builder'
+import {
+  barCapacity,
+  barFill,
+  breathAnchor,
+  isBreath,
+  isNote,
+  pitchOf,
+  sixteenthsPerBeat,
+  type BarElement,
+  type NoteElement,
+} from '@/training/builder'
 import { BPM_DEFAULT, secondsPerBeat } from '@/training/tempo'
 
 const props = withDefaults(
   defineProps<{
-    notes: readonly BuilderNote[]
+    elements: readonly BarElement[]
     beats: number
     /** Pitch range of the lanes, MIDI; shared by all bars so they compare at a glance. */
     low: number
@@ -69,17 +79,17 @@ interface Shape {
 const shapes = computed<Shape[]>(() => {
   const result: Shape[] = []
   let at = 0
-  props.notes.forEach((note, index) => {
+  props.elements.forEach((note, index) => {
     const left = at * X
     const right = (at + note.sixteenths) * X
     at += note.sixteenths
-    if (note.midi === null) return
+    if (!isNote(note)) return
     const y = laneY(note.midi)
     const half = (BODY * Y) / 2
     const top = y - half
     const bottom = y + half
     const next =
-      index + 1 < props.notes.length ? (props.notes[index + 1]?.midi ?? null) : props.nextMidi
+      index + 1 < props.elements.length ? pitchOf(props.elements[index + 1]) : props.nextMidi
     if (note.kind === 'attack') {
       const tip = left + Math.min(ATTACK * X, (right - left) / 2)
       result.push({
@@ -108,7 +118,7 @@ const shapes = computed<Shape[]>(() => {
   return result
 })
 
-const fill = computed(() => props.notes.reduce((sum, note) => sum + note.sixteenths, 0))
+const fill = computed(() => barFill(props.elements))
 
 // ---- Breaths: veils of haze on a canvas over the drawing, played over and over at the tempo ----
 
@@ -123,24 +133,25 @@ interface BarBreath extends BreathTarget {
 
 const breaths = computed<BarBreath[]>(() => {
   const perSixteenth = secondsPerBeat(props.bpm) / sixteenthsPerBeat(props.beats)
-  const around = (midi: number | null): BuilderNote[] =>
-    midi === null ? [] : [{ midi, sixteenths: 0, kind: 'hold' }]
+  // The pitches around the bar stand in as notes of no length, for the breaths to hang from.
+  const around = (midi: number | null): NoteElement[] =>
+    midi === null ? [] : [{ type: 'note', midi, kind: 'hold', sixteenths: 0 }]
   const before = around(props.prevMidi)
-  const context = [...before, ...props.notes, ...around(props.nextMidi)]
+  const context = [...before, ...props.elements, ...around(props.nextMidi)]
   const result: BarBreath[] = []
   let at = 0
-  props.notes.forEach((note, index) => {
-    if (note.breath) {
+  props.elements.forEach((element, index) => {
+    if (isBreath(element)) {
       result.push({
-        kind: note.breath,
+        kind: element.type,
         start: 0,
-        duration: note.sixteenths * perSixteenth,
+        duration: element.sixteenths * perSixteenth,
         midi: breathAnchor(context, index + before.length),
         from: at,
-        to: at + note.sixteenths,
+        to: at + element.sixteenths,
       })
     }
-    at += note.sixteenths
+    at += element.sixteenths
   })
   return result
 })

@@ -382,15 +382,6 @@ function toggleMic(): void {
   padding: 4rem 0 2.5rem;
 }
 
-.kicker {
-  margin: 0 0 0.75rem;
-  font-size: 0.72rem;
-  font-weight: 600;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: var(--muted);
-}
-
 .head__title {
   margin: 0 0 0.6rem;
   font-size: clamp(2rem, 4.6vw, 3.2rem);
