@@ -8,7 +8,10 @@ defineProps<{
 <template>
   <main id="main" class="screen">
     <slot name="backdrop" />
-    <div class="screen__chrome">
+    <div v-if="$slots.side" class="screen__side">
+      <slot name="side" />
+    </div>
+    <div class="screen__chrome" :class="{ 'screen__chrome--side': $slots.side }">
       <h1 class="screen__title">{{ title }}</h1>
       <slot />
       <slot name="dock" />
@@ -31,6 +34,17 @@ defineProps<{
   flex-direction: column;
   flex: 1 1 auto;
   min-height: 0;
+}
+
+/* A strip down the left edge, the whole height of the screen, under the chrome. */
+.screen__side {
+  position: absolute;
+  inset: 0 auto 0 0;
+  z-index: 1;
+}
+
+.screen__chrome--side {
+  padding-left: 3.1rem;
 }
 
 .screen__title {

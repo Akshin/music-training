@@ -6,17 +6,19 @@
  * first character says which: `z` deflated, `j` plain JSON.
  */
 import {
-  LOUDNESS_ZONES,
   NOTE_KINDS,
   NOTE_LENGTHS,
   ONSETS,
   parseDraft,
   type BarElement,
   type ElementType,
+  type LoudnessZone,
   type TrainingDraft,
 } from '@/training/builder'
 
 const VERSION = 1
+/** Loudness zones by their code in a link; new zones go at the end so old links keep their meaning. */
+const LOUDNESS_CODES: readonly LoudnessZone[] = ['soft', 'good', 'loud', 'mild', 'firm']
 /** Pitch fields past MIDI for the elements with no pitch. */
 const PITCHLESS: Record<Exclude<ElementType, 'note'>, number> = {
   rest: 128,
@@ -26,10 +28,11 @@ const PITCHLESS: Record<Exclude<ElementType, 'note'>, number> = {
 
 /**
  * `[version, title, bpmMin, bpmMax, loudness, beats, onset, bars]`: a free tempo is `0, 0`, free
- * loudness `-1`, loudness and onset are indexes into their option lists, and each element is one
- * number, `pitch * 64 + length * 8 + kind`, with length and kind as indexes too; a rest, an inhale
- * and an exhale take pitches 128, 129 and 130. Then, if there are any, reprises as flat
- * `[from, to, times, …]` and the description; links made before them simply end earlier.
+ * loudness `-1`, loudness is an index into `LOUDNESS_CODES` and onset into its option list, and
+ * each element is one number, `pitch * 64 + length * 8 + kind`, with length and kind as indexes
+ * too; a rest, an inhale and an exhale take pitches 128, 129 and 130. Then, if there are any,
+ * reprises as flat `[from, to, times, …]` and the description; links made before them simply end
+ * earlier.
  */
 type Payload =
   | [number, string, number, number, number, number, number, number[][]]
@@ -61,7 +64,7 @@ export function toPayload(draft: TrainingDraft): Payload {
     draft.title,
     draft.bpmRange?.min ?? 0,
     draft.bpmRange?.max ?? 0,
-    LOUDNESS_ZONES.findIndex((option) => option.zone === draft.loudness),
+    LOUDNESS_CODES.findIndex((zone) => zone === draft.loudness),
     draft.beats,
     ONSETS.findIndex((option) => option.onset === draft.onset),
     draft.bars.map((bar) => bar.elements.map(packElement)),
@@ -81,7 +84,7 @@ export function fromPayload(value: unknown): TrainingDraft | null {
     title,
     description,
     bpmRange: bpmMin && bpmMax ? { min: bpmMin, max: bpmMax } : null,
-    loudness: typeof loudness === 'number' ? LOUDNESS_ZONES[loudness]?.zone : null,
+    loudness: typeof loudness === 'number' ? LOUDNESS_CODES[loudness] : null,
     beats,
     onset: typeof onset === 'number' ? ONSETS[onset]?.onset : undefined,
     bars: Array.isArray(bars)

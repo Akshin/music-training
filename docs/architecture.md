@@ -45,8 +45,9 @@ src/
                      BarEntryPanel (такт + ввод), TimelinePanel (такты,
                      репризы); контролы NotePad (октава пианино), BarRoll
                      (такт мини-роллом), BpmRangeControl, SegmentedChoice
-  components/volume/ вертикальные индикаторы громкости (VolumeBar,
-                     VolumeSegments, VolumeCapsule): проп `value` 0…1
+  components/volume/ VolumeStrip — вертикальная полоса громкости (`level`,
+                     `average`, `success`, коридор `low`/`high`); meter.ts —
+                     `clampLevel` для шкалы 0…1
   components/pitch/  PitchRoll — ноты по Y (гибкая ось: диапазон делит высоту
                      графика поровну, по умолчанию 20rem; подписи редеют на
                      тесных дорожках — все ноты, белые клавиши, только C), время
@@ -153,8 +154,9 @@ tracks, метроном) выпилен; тренировки, которым �
 - **`useExerciseSession`** (`src/composables`) — весь звук упражнения на одном
   `AudioContext`. `playing` запускает и останавливает воспроизведение; с
   `listen` сначала открывается микрофон, чтобы первые такты уже слушались.
-  Отдаёт `clock` (позиция в такте по слышимому времени), `level` и `pitch`
-  (громкость и окно кадров высоты для графиков), `setNotes`,
+  Отдаёт `clock` (позиция в такте по слышимому времени), `level` (с плавным
+  спадом), `rawLevel` (последний кадр как есть), `averageLevel` (среднее по мощности
+  за секунду) и `pitch` (окно кадров высоты для графиков), `setNotes`,
   `startListening`/`stopListening` (микрофон без воспроизведения — так
   работает `/lab`), `traceTimeOf` и `scoreNotes`.
 - **Одни часы для звука и микрофона.** Ворклет захвата нумерует семплы от

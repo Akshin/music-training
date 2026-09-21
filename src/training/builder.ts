@@ -63,7 +63,7 @@ export const ONSETS: readonly OnsetOption[] = [
 
 export const ONSET_DEFAULT: Onset = 'neutral'
 
-export type LoudnessZone = 'soft' | 'good' | 'loud'
+export type LoudnessZone = 'soft' | 'mild' | 'good' | 'firm' | 'loud'
 
 export interface LoudnessZoneOption {
   readonly zone: LoudnessZone
@@ -73,11 +73,18 @@ export interface LoudnessZoneOption {
   readonly high: number
 }
 
-/** Zones follow the loudness colour stops, so each one is one colour on the meters. */
+/**
+ * Five steps of the same width (6 dB each) with a narrow gap between neighbours: the mean loudness
+ * of a second has to sit inside the step, so it is wide enough to hold and narrow enough to make
+ * the singer aim. The ids `soft`, `good` and `loud` are older than the two between them and stay
+ * as they were.
+ */
 export const LOUDNESS_ZONES: readonly LoudnessZoneOption[] = [
-  { zone: 'soft', label: 'Тихо', low: 0.35, high: 0.55 },
-  { zone: 'good', label: 'Средне', low: 0.55, high: 0.78 },
-  { zone: 'loud', label: 'Громко', low: 0.78, high: 0.92 },
+  { zone: 'soft', label: 'Тихо', low: 0.31, high: 0.41 },
+  { zone: 'mild', label: 'Негромко', low: 0.43, high: 0.53 },
+  { zone: 'good', label: 'Средне', low: 0.55, high: 0.65 },
+  { zone: 'firm', label: 'Погромче', low: 0.67, high: 0.77 },
+  { zone: 'loud', label: 'Громко', low: 0.79, high: 0.89 },
 ]
 
 export interface BpmRange {

@@ -36,6 +36,8 @@ export interface ExerciseSessionOptions {
 const FLOOR_DB = -60
 /** Seconds the meter level takes to fall from full to empty once the sound stops. Rises are instant. */
 const RELEASE_SECONDS = 1.5
+/** Seconds the average loudness is taken over. */
+const AVERAGE_SECONDS = 1
 /** Seconds of frames kept for pitch charts. */
 const TRACE_SECONDS = 10
 /** Frames quieter than this carry no pitch: the tracker still finds periodicity in room noise. */
@@ -68,6 +70,8 @@ export function useExerciseSession(options: ExerciseSessionOptions = {}) {
   const micState = ref<MicState>('idle')
   const error = ref<string | null>(null)
   const level = ref(0)
+  const rawLevel = ref(0)
+  const averageLevel = ref(0)
   const pitch = shallowRef<PitchTrace>(EMPTY_PITCH_TRACE)
   const timbre = shallowRef<Timbre | null>(null)
 
@@ -193,6 +197,8 @@ export function useExerciseSession(options: ExerciseSessionOptions = {}) {
     await source?.stop()
     shown = 0
     level.value = 0
+    rawLevel.value = 0
+    averageLevel.value = 0
     pitch.value = EMPTY_PITCH_TRACE
     timbre.value = null
     micState.value = 'idle'
@@ -227,6 +233,12 @@ export function useExerciseSession(options: ExerciseSessionOptions = {}) {
     lastFrame = now
     shown = Math.max(target, shown - elapsed / RELEASE_SECONDS)
     level.value = shown
+    rawLevel.value = target
+    averageLevel.value = meanMeter(
+      loudFrames,
+      Math.max(0, count - Math.round(AVERAGE_SECONDS * timeline.frameRate)),
+      count,
+    )
     raf = requestAnimationFrame(tick)
   }
 
@@ -402,6 +414,10 @@ export function useExerciseSession(options: ExerciseSessionOptions = {}) {
     error: readonly(error),
     /** Microphone loudness for meters, 0…1 over −60…0 dBFS, falling back slowly. */
     level: readonly(level),
+    /** The newest frame's loudness on the same scale, as it is: no release, no averaging. */
+    rawLevel: readonly(rawLevel),
+    /** Loudness averaged in power over the last second on the same scale; 0 in silence. */
+    averageLevel: readonly(averageLevel),
     /** Recent microphone frames — pitch and loudness — for pitch charts. */
     pitch: pitchView,
     /** Levels of the voice's first three harmonics over the last 80 ms; null while not singing. */
@@ -419,6 +435,18 @@ export type ExerciseSession = ReturnType<typeof useExerciseSession>
 
 function toMeter(dbfs: number): number {
   if (!Number.isFinite(dbfs)) return 0
+  return Math.min(1, Math.max(0, (dbfs - FLOOR_DB) / -FLOOR_DB))
+}
+
+/**
+ * Mean of meter levels `[from, to)` taken in power, so a pause weighs what it sounds like — nearly
+ * nothing — instead of dragging a mean of decibels down to the floor.
+ */
+function meanMeter(levels: Float32Array, from: number, to: number): number {
+  if (to <= from) return 0
+  let power = 0
+  for (let i = from; i < to; i++) power += 10 ** (((levels[i] ?? 0) * -FLOOR_DB + FLOOR_DB) / 10)
+  const dbfs = 10 * Math.log10(power / (to - from))
   return Math.min(1, Math.max(0, (dbfs - FLOOR_DB) / -FLOOR_DB))
 }
 

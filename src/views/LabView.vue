@@ -9,14 +9,15 @@ import {
 } from '@phosphor-icons/vue'
 import MouthFigure from '@/components/face/MouthFigure.vue'
 import HarmonicStrings from '@/components/timbre/HarmonicStrings.vue'
+import SegmentedChoice, { type SegmentedOption } from '@/components/builder/SegmentedChoice.vue'
+import VolumeStrip from '@/components/volume/VolumeStrip.vue'
+import { loudnessColor } from '@/components/loudness'
 import PitchRoll from '@/components/pitch/PitchRoll.vue'
 import { targetEnd, type PitchSegment, type PitchTarget } from '@/components/pitch/trace'
-import VolumeBar from '@/components/volume/VolumeBar.vue'
-import VolumeCapsule from '@/components/volume/VolumeCapsule.vue'
-import VolumeSegments from '@/components/volume/VolumeSegments.vue'
 import ExerciseConsole from '@/components/exercise/ExerciseConsole.vue'
 import { useExercise } from '@/composables/useExercise'
 import { useMouthTracker } from '@/composables/useMouthTracker'
+import { LOUDNESS_ZONES, type LoudnessZone } from '@/training/builder'
 import { SANDBOX } from '@/training/exercises'
 import {
   TIMBRE_TARGET,
@@ -31,6 +32,8 @@ import {
 const exercise = useExercise(SANDBOX)
 const {
   level,
+  rawLevel,
+  averageLevel,
   pitch,
   timbre,
   micState: state,
@@ -38,6 +41,18 @@ const {
   startListening,
   stopListening,
 } = exercise.session
+
+// Loudness: the strip against a chosen zone; the zone and the average are the only things judged.
+const zoneOptions: SegmentedOption<LoudnessZone>[] = LOUDNESS_ZONES.map((option) => ({
+  value: option.zone,
+  label: option.label,
+  color: loudnessColor((option.low + option.high) / 2),
+}))
+const zoneId = ref<LoudnessZone>('good')
+const zone = computed(() => LOUDNESS_ZONES.find((option) => option.zone === zoneId.value)!)
+const inZone = computed(
+  () => zone.value.low <= averageLevel.value && averageLevel.value <= zone.value.high,
+)
 
 /** Ranges to try the flexible note axis with, from a fifth to three octaves. */
 const PITCH_RANGES = [
@@ -210,17 +225,18 @@ function toggleMic(): void {
     <section class="category" aria-labelledby="category-volume">
       <h2 id="category-volume" class="category__title">Громкость</h2>
       <ul class="specimens">
-        <li class="specimen">
-          <VolumeBar :value="level" />
-          <code class="specimen__name">VolumeBar</code>
-        </li>
-        <li class="specimen">
-          <VolumeSegments :value="level" />
-          <code class="specimen__name">VolumeSegments</code>
-        </li>
-        <li class="specimen">
-          <VolumeCapsule :value="level" />
-          <code class="specimen__name">VolumeCapsule</code>
+        <li class="specimen specimen--wide">
+          <SegmentedChoice v-model="zoneId" :options="zoneOptions" label="Зона громкости" />
+          <div class="strip-stage">
+            <VolumeStrip
+              :level="rawLevel"
+              :average="averageLevel"
+              :success="inZone"
+              :low="zone.low"
+              :high="zone.high"
+            />
+          </div>
+          <code class="specimen__name">VolumeStrip</code>
         </li>
       </ul>
     </section>
@@ -489,6 +505,13 @@ function toggleMic(): void {
 .specimen__name {
   font-size: 0.78rem;
   color: var(--muted);
+}
+
+.strip-stage {
+  height: 22rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-core);
+  background: var(--bg);
 }
 
 .pitch-tools {

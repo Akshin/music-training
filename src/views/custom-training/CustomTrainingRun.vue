@@ -6,6 +6,7 @@ import IconSwitch from '@/components/controls/IconSwitch.vue'
 import ExerciseConsole from '@/components/exercise/ExerciseConsole.vue'
 import ExerciseScreen from '@/components/exercise/ExerciseScreen.vue'
 import PitchRoll from '@/components/pitch/PitchRoll.vue'
+import VolumeStrip from '@/components/volume/VolumeStrip.vue'
 import type { BreathTarget } from '@/components/pitch/breath'
 import type { PitchTarget } from '@/components/pitch/trace'
 import { loudnessColor } from '@/components/loudness'
@@ -55,7 +56,7 @@ const definition: ExerciseDefinition = {
 }
 const exercise = useExercise(definition)
 const { settings, session } = exercise
-const { playing, pitch, error, micState, level } = session
+const { playing, pitch, error, micState, rawLevel, averageLevel } = session
 
 // The description greets whoever opens the link, and can be read again from the terms row.
 const about = ref<HTMLDialogElement | null>(null)
@@ -205,7 +206,10 @@ const chart = computed(() => {
 
 const onset = ONSETS.find((option) => option.onset === draft.onset)
 const zone = LOUDNESS_ZONES.find((option) => option.zone === draft.loudness) ?? null
-const inZone = computed(() => zone !== null && zone.low <= level.value && level.value <= zone.high)
+/** The mean of the last second sits in the training's zone. */
+const inZone = computed(
+  () => zone !== null && zone.low <= averageLevel.value && averageLevel.value <= zone.high,
+)
 
 function pitchText(result: NoteResult): string {
   if (result.cents === null) return 'не услышал'
@@ -322,6 +326,16 @@ function passText(summary: PassSummary): string {
         </div>
       </dialog>
     </section>
+
+    <template #side>
+      <VolumeStrip
+        :level="rawLevel"
+        :average="averageLevel"
+        :success="playing && inZone"
+        :low="zone?.low"
+        :high="zone?.high"
+      />
+    </template>
 
     <template #dock>
       <ExerciseConsole
