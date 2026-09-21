@@ -5,6 +5,9 @@ import type { ExerciseDefinition } from '@/training/exercises'
 import { TONAL_KEY_DEFAULT, keyPitchClass, keyTonicMidi, type TonalKey } from '@/training/keys'
 import { BEATS_DEFAULT, BPM_DEFAULT } from '@/training/tempo'
 
+/** Seconds the loudness strip averages over: short enough to follow the voice without lag. */
+const AVERAGE_SECONDS = 0.3
+
 /** Settings every exercise shares; `ExerciseConsole` edits them. */
 export interface ExerciseSettings {
   readonly bpm: Ref<number>
@@ -36,6 +39,7 @@ export function useExercise(definition: ExerciseDefinition) {
     clicks: settings.metronome,
     backing: backingUrl,
     listen: definition.listen === true,
+    averageSeconds: AVERAGE_SECONDS,
   })
 
   return {

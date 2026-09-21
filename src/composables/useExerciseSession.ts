@@ -32,11 +32,13 @@ export interface ExerciseSessionOptions {
   readonly backing?: Readonly<Ref<string | null>>
   /** Open the microphone when playing starts; playback waits for it so the first bars are heard. */
   readonly listen?: boolean
+  /** Seconds the average loudness is taken over. Default 1 — what calibration measures notes by. */
+  readonly averageSeconds?: number
 }
 
 /** Seconds the meter level takes to fall from full to empty once the sound stops. Rises are instant. */
 const RELEASE_SECONDS = 1.5
-/** Seconds the average loudness is taken over. */
+/** Seconds the average loudness is taken over unless the caller sets its own. */
 const AVERAGE_SECONDS = 1
 /** Seconds of frames kept for pitch charts. */
 const TRACE_SECONDS = 10
@@ -63,6 +65,7 @@ export function useExerciseSession(options: ExerciseSessionOptions = {}) {
   const beats = options.beats ?? ref(BEATS_DEFAULT)
   const clicks = options.clicks ?? ref(true)
   const backing = options.backing ?? ref<string | null>(null)
+  const averageSeconds = options.averageSeconds ?? AVERAGE_SECONDS
 
   const playing = ref(false)
   const micState = ref<MicState>('idle')
@@ -263,7 +266,7 @@ export function useExerciseSession(options: ExerciseSessionOptions = {}) {
     shown = Math.max(target, shown - elapsed / RELEASE_SECONDS)
     level.value = shown
     rawLevel.value = target
-    const recent = Math.max(0, count - Math.round(AVERAGE_SECONDS * timeline.frameRate))
+    const recent = Math.max(0, count - Math.round(averageSeconds * timeline.frameRate))
     const average = meanDbfs(dbfsFrames, recent, count)
     averageLevel.value = toLevel(average)
     averageDbfs.value = average
@@ -450,9 +453,9 @@ export function useExerciseSession(options: ExerciseSessionOptions = {}) {
     level: readonly(level),
     /** The newest frame's loudness on the same scale, as it is: no release, no averaging. */
     rawLevel: readonly(rawLevel),
-    /** Loudness averaged in power over the last second on the same scale; 0 in silence. */
+    /** Loudness averaged in power over the last `averageSeconds` on the same scale; 0 in silence. */
     averageLevel: readonly(averageLevel),
-    /** The same, in dBFS before any calibration: the newest frame, the mean of a second, the peak. */
+    /** The same, in dBFS before any calibration: the newest frame, the mean and the peak of that window. */
     rawDbfs: readonly(rawDbfs),
     averageDbfs: readonly(averageDbfs),
     peakDbfs: readonly(peakDbfs),
