@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
-import { PhInfo, PhMusicNotes } from '@phosphor-icons/vue'
+import { PhInfo, PhMicrophone, PhMusicNotes } from '@phosphor-icons/vue'
+import { useRoute } from 'vue-router'
 import type { MapPosition } from '@audio-core/core/index'
 import IconSwitch from '@/components/controls/IconSwitch.vue'
 import ExerciseConsole from '@/components/exercise/ExerciseConsole.vue'
@@ -56,7 +57,8 @@ const definition: ExerciseDefinition = {
 }
 const exercise = useExercise(definition)
 const { settings, session } = exercise
-const { playing, pitch, error, micState, rawLevel, averageLevel } = session
+const { playing, pitch, error, micState, rawLevel, averageLevel, calibration } = session
+const route = useRoute()
 
 // The description greets whoever opens the link, and can be read again from the terms row.
 const about = ref<HTMLDialogElement | null>(null)
@@ -206,6 +208,9 @@ const chart = computed(() => {
 
 const onset = ONSETS.find((option) => option.onset === draft.onset)
 const zone = LOUDNESS_ZONES.find((option) => option.zone === draft.loudness) ?? null
+/** The microphone is open, but nobody has calibrated it: the meter is on the plain scale. */
+const needsCalibration = computed(() => micState.value === 'running' && calibration.value === null)
+
 /** The mean of the last second sits in the training's zone. */
 const inZone = computed(
   () => zone !== null && zone.low <= averageLevel.value && averageLevel.value <= zone.high,
@@ -257,6 +262,16 @@ function passText(summary: PassSummary): string {
             <PhInfo :size="14" weight="light" aria-hidden="true" />
             Описание
           </button>
+        </li>
+        <li>
+          <RouterLink
+            class="term term--button"
+            :class="{ 'term--attention': needsCalibration }"
+            :to="{ name: 'calibration', query: { next: route.fullPath } }"
+          >
+            <PhMicrophone :size="14" weight="light" aria-hidden="true" />
+            {{ needsCalibration ? 'Откалибровать микрофон' : 'Калибровка' }}
+          </RouterLink>
         </li>
       </ul>
 
@@ -375,7 +390,12 @@ function passText(summary: PassSummary): string {
   font: inherit;
   font-size: 0.85rem;
   font-weight: 600;
+  text-decoration: none;
   cursor: pointer;
+}
+
+.term--attention {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
 }
 
 .term--button:hover {

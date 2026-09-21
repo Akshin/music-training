@@ -136,6 +136,13 @@ const router = createRouter({
       meta: { title: 'Вход', public: true },
     },
     {
+      // `?next=` is where the way back leads.
+      path: '/calibration',
+      name: 'calibration',
+      component: () => import('@/views/CalibrationView.vue'),
+      meta: { title: 'Калибровка микрофона' },
+    },
+    {
       path: '/lab',
       name: 'lab',
       component: () => import('@/views/LabView.vue'),

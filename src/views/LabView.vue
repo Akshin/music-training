@@ -195,29 +195,34 @@ function toggleMic(): void {
         <h1 class="head__title">Песочница</h1>
         <p class="head__lead">Компоненты на живых данных. Источник — микрофон.</p>
       </div>
-      <button
-        type="button"
-        class="mic"
-        :class="{ 'mic--on': state === 'running' }"
-        :aria-pressed="state === 'running'"
-        :disabled="state === 'starting'"
-        @click="toggleMic"
-      >
-        <PhMicrophoneSlash
-          v-if="state === 'running'"
-          :size="16"
-          weight="light"
-          aria-hidden="true"
-        />
-        <PhMicrophone v-else :size="16" weight="light" aria-hidden="true" />
-        {{
-          state === 'running'
-            ? 'Выключить микрофон'
-            : state === 'starting'
-              ? 'Подключаю…'
-              : 'Включить микрофон'
-        }}
-      </button>
+      <div class="head__actions">
+        <RouterLink class="calibrate" :to="{ name: 'calibration', query: { next: '/lab' } }">
+          Калибровка микрофона
+        </RouterLink>
+        <button
+          type="button"
+          class="mic"
+          :class="{ 'mic--on': state === 'running' }"
+          :aria-pressed="state === 'running'"
+          :disabled="state === 'starting'"
+          @click="toggleMic"
+        >
+          <PhMicrophoneSlash
+            v-if="state === 'running'"
+            :size="16"
+            weight="light"
+            aria-hidden="true"
+          />
+          <PhMicrophone v-else :size="16" weight="light" aria-hidden="true" />
+          {{
+            state === 'running'
+              ? 'Выключить микрофон'
+              : state === 'starting'
+                ? 'Подключаю…'
+                : 'Включить микрофон'
+          }}
+        </button>
+      </div>
     </header>
 
     <p v-if="error" class="error" role="alert">{{ error }}</p>
@@ -411,6 +416,35 @@ function toggleMic(): void {
   color: var(--muted);
   font-size: 1.05rem;
   line-height: 1.55;
+}
+
+.head__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.calibrate {
+  padding: 0.7rem 1.1rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  color: var(--muted);
+  font-weight: 600;
+  text-decoration: none;
+  transition:
+    border-color 280ms var(--ease),
+    color 280ms var(--ease);
+}
+
+.calibrate:hover {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+  color: var(--ink);
+}
+
+.calibrate:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
 }
 
 .mic {

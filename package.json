@@ -14,6 +14,7 @@
     "lint:eslint": "eslint . --fix --cache",
     "format": "prettier --write --experimental-cli src/",
     "test:core": "vitest run --root src/audio-core",
+    "test:app": "vitest run src/training",
     "test:core:watch": "vitest --root src/audio-core"
   },
   "dependencies": {

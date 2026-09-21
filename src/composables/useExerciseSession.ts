@@ -1,4 +1,4 @@
-import { onScopeDispose, readonly, ref, shallowRef, watch, type Ref } from 'vue'
+import { computed, onScopeDispose, readonly, ref, shallowRef, watch, type Ref } from 'vue'
 import {
   BeatGrid,
   scoreTake,
@@ -11,8 +11,10 @@ import {
 import { WebLoop } from '@audio-core/host/web/web-loop'
 import { WebTransport } from '@audio-core/host/web/web-transport'
 import { WorkerHost } from '@audio-core/host/web/worker-host'
-import { MicSource } from '@audio-core/io/mic-source'
+import { MicSource, type MicSourceInfo } from '@audio-core/io/mic-source'
 import { EMPTY_PITCH_TRACE, type PitchTrace } from '@/components/pitch/trace'
+import { useCalibration } from '@/composables/useCalibration'
+import { VOICE_FLOOR_DB, inputKey, levelMap, voiceFloorDb } from '@/training/calibration'
 import { BEATS_DEFAULT, BPM_DEFAULT, meterFor } from '@/training/tempo'
 import type { Timbre } from '@/training/timbre'
 
@@ -32,16 +34,12 @@ export interface ExerciseSessionOptions {
   readonly listen?: boolean
 }
 
-/** dBFS at the bottom of a meter; anything quieter reads as empty. */
-const FLOOR_DB = -60
 /** Seconds the meter level takes to fall from full to empty once the sound stops. Rises are instant. */
 const RELEASE_SECONDS = 1.5
 /** Seconds the average loudness is taken over. */
 const AVERAGE_SECONDS = 1
 /** Seconds of frames kept for pitch charts. */
 const TRACE_SECONDS = 10
-/** Frames quieter than this carry no pitch: the tracker still finds periodicity in room noise. */
-const PITCH_FLOOR_DB = -55
 /** Frames taken around the targets when scoring, seconds each side. */
 const SCORE_MARGIN_SECONDS = 0.5
 /** Frames averaged into the harmonic levels (80 ms): single frames jitter by a few dB. */
@@ -72,6 +70,10 @@ export function useExerciseSession(options: ExerciseSessionOptions = {}) {
   const level = ref(0)
   const rawLevel = ref(0)
   const averageLevel = ref(0)
+  const rawDbfs = ref(-Infinity)
+  const averageDbfs = ref(-Infinity)
+  const peakDbfs = ref(-Infinity)
+  const micInfo = shallowRef<MicSourceInfo | null>(null)
   const pitch = shallowRef<PitchTrace>(EMPTY_PITCH_TRACE)
   const timbre = shallowRef<Timbre | null>(null)
 
@@ -93,7 +95,27 @@ export function useExerciseSession(options: ExerciseSessionOptions = {}) {
   let lastFrame = 0
   let midiFrames = new Float32Array(0)
   let loudFrames = new Float32Array(0)
+  let dbfsFrames = new Float32Array(0)
+  let peakFrames = new Float32Array(0)
   const harmonicFrames = [0, 1, 2].map(() => new Float32Array(TIMBRE_FRAMES))
+
+  // The input's calibration lays the meter scale and sets where a voice starts; without one the
+  // scale is the plain −60…0 dBFS. It is read once per change, not once per frame.
+  const { calibrationOf } = useCalibration()
+  const inputName = computed(() =>
+    micInfo.value === null ? null : inputKey(micInfo.value.label, micInfo.value.deviceId),
+  )
+  const calibration = computed(() => calibrationOf(inputName.value))
+  let toLevel = levelMap(null)
+  let voiceFloor = VOICE_FLOOR_DB
+  watch(
+    calibration,
+    (value) => {
+      toLevel = levelMap(value)
+      voiceFloor = voiceFloorDb(value)
+    },
+    { immediate: true },
+  )
 
   const fetched = new Map<string, Promise<ArrayBuffer>>()
   let decoded: { url: string; buffer: AudioBuffer } | null = null
@@ -174,6 +196,9 @@ export function useExerciseSession(options: ExerciseSessionOptions = {}) {
       const capacity = Math.round(TRACE_SECONDS * worker.timeline.frameRate)
       midiFrames = new Float32Array(capacity)
       loudFrames = new Float32Array(capacity)
+      dbfsFrames = new Float32Array(capacity)
+      peakFrames = new Float32Array(capacity)
+      micInfo.value = info
       micState.value = 'running'
       lastFrame = performance.now()
       raf = requestAnimationFrame(tick)
@@ -199,6 +224,10 @@ export function useExerciseSession(options: ExerciseSessionOptions = {}) {
     level.value = 0
     rawLevel.value = 0
     averageLevel.value = 0
+    rawDbfs.value = -Infinity
+    averageDbfs.value = -Infinity
+    peakDbfs.value = -Infinity
+    micInfo.value = null
     pitch.value = EMPTY_PITCH_TRACE
     timbre.value = null
     micState.value = 'idle'
@@ -212,11 +241,11 @@ export function useExerciseSession(options: ExerciseSessionOptions = {}) {
     const begin = Math.max(0, end - midiFrames.length)
     const count = end - begin
     timeline.slice('midi', begin, end, midiFrames)
-    timeline.slice('dbfs', begin, end, loudFrames)
+    timeline.slice('dbfs', begin, end, dbfsFrames)
     for (let i = 0; i < count; i++) {
-      const dbfs = loudFrames[i] ?? -Infinity
-      if (!(dbfs >= PITCH_FLOOR_DB)) midiFrames[i] = NaN
-      loudFrames[i] = toMeter(dbfs)
+      const dbfs = dbfsFrames[i] ?? -Infinity
+      if (!(dbfs >= voiceFloor)) midiFrames[i] = NaN
+      loudFrames[i] = toLevel(dbfs)
     }
     pitch.value = {
       midi: midiFrames,
@@ -234,11 +263,13 @@ export function useExerciseSession(options: ExerciseSessionOptions = {}) {
     shown = Math.max(target, shown - elapsed / RELEASE_SECONDS)
     level.value = shown
     rawLevel.value = target
-    averageLevel.value = meanMeter(
-      loudFrames,
-      Math.max(0, count - Math.round(AVERAGE_SECONDS * timeline.frameRate)),
-      count,
-    )
+    const recent = Math.max(0, count - Math.round(AVERAGE_SECONDS * timeline.frameRate))
+    const average = meanDbfs(dbfsFrames, recent, count)
+    averageLevel.value = toLevel(average)
+    averageDbfs.value = average
+    rawDbfs.value = count === 0 ? -Infinity : (dbfsFrames[count - 1] ?? -Infinity)
+    timeline.slice('peak', begin + recent, end, peakFrames)
+    peakDbfs.value = peakDb(peakFrames, count - recent)
     raf = requestAnimationFrame(tick)
   }
 
@@ -412,12 +443,25 @@ export function useExerciseSession(options: ExerciseSessionOptions = {}) {
     playing,
     micState: readonly(micState),
     error: readonly(error),
-    /** Microphone loudness for meters, 0…1 over −60…0 dBFS, falling back slowly. */
+    /**
+     * Microphone loudness for meters, 0…1 on the input's calibration (else −60…0 dBFS), falling
+     * back slowly.
+     */
     level: readonly(level),
     /** The newest frame's loudness on the same scale, as it is: no release, no averaging. */
     rawLevel: readonly(rawLevel),
     /** Loudness averaged in power over the last second on the same scale; 0 in silence. */
     averageLevel: readonly(averageLevel),
+    /** The same, in dBFS before any calibration: the newest frame, the mean of a second, the peak. */
+    rawDbfs: readonly(rawDbfs),
+    averageDbfs: readonly(averageDbfs),
+    peakDbfs: readonly(peakDbfs),
+    /** The open input; null while the microphone is off. */
+    input: readonly(micInfo),
+    /** What the input's calibration is stored under; null while the microphone is off. */
+    inputKey: inputName,
+    /** The calibration of the open input; null when there is none. */
+    calibration,
     /** Recent microphone frames — pitch and loudness — for pitch charts. */
     pitch: pitchView,
     /** Levels of the voice's first three harmonics over the last 80 ms; null while not singing. */
@@ -433,21 +477,25 @@ export function useExerciseSession(options: ExerciseSessionOptions = {}) {
 
 export type ExerciseSession = ReturnType<typeof useExerciseSession>
 
-function toMeter(dbfs: number): number {
-  if (!Number.isFinite(dbfs)) return 0
-  return Math.min(1, Math.max(0, (dbfs - FLOOR_DB) / -FLOOR_DB))
+/**
+ * Mean of dBFS frames `[from, to)` taken in power, so a pause weighs what it sounds like — nearly
+ * nothing — instead of dragging a mean of decibels down to the floor. −∞ when nothing sounded.
+ */
+function meanDbfs(frames: Float32Array, from: number, to: number): number {
+  if (to <= from) return -Infinity
+  let power = 0
+  for (let i = from; i < to; i++) {
+    const dbfs = frames[i] ?? -Infinity
+    if (Number.isFinite(dbfs)) power += 10 ** (dbfs / 10)
+  }
+  return power > 0 ? 10 * Math.log10(power / (to - from)) : -Infinity
 }
 
-/**
- * Mean of meter levels `[from, to)` taken in power, so a pause weighs what it sounds like — nearly
- * nothing — instead of dragging a mean of decibels down to the floor.
- */
-function meanMeter(levels: Float32Array, from: number, to: number): number {
-  if (to <= from) return 0
-  let power = 0
-  for (let i = from; i < to; i++) power += 10 ** (((levels[i] ?? 0) * -FLOOR_DB + FLOOR_DB) / 10)
-  const dbfs = 10 * Math.log10(power / (to - from))
-  return Math.min(1, Math.max(0, (dbfs - FLOOR_DB) / -FLOOR_DB))
+/** The largest of the first `count` linear peaks, in dBFS; −∞ when there is none. */
+function peakDb(peaks: Float32Array, count: number): number {
+  let max = 0
+  for (let i = 0; i < count; i++) max = Math.max(max, peaks[i] ?? 0)
+  return max > 0 ? 20 * Math.log10(max) : -Infinity
 }
 
 function describe(cause: unknown): string {

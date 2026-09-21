@@ -41,4 +41,5 @@ npm install --legacy-peer-deps
 npm run dev
 ```
 
-Сборка: `npm run build`. Линт: `npm run lint`. Тесты движка: `npm run test:core`.
+Сборка: `npm run build`. Линт: `npm run lint`. Тесты движка: `npm run test:core`. Тесты логики
+приложения (`src/training/__tests__`): `npm run test:app`.

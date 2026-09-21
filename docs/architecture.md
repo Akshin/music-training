@@ -13,7 +13,8 @@
 `TetrachordTrainingView`. Конструктор: `/builder/trainings` и `/builder/edit`
 (`views/builder/`); тренировка из конструктора по ссылке — `/custom-training`.
 Вход, регистрация и сброс пароля — `/auth` (`AuthView`); профиль — `/profile`
-(`ProfileView`); аккаунт показывает `SiteNav`.
+(`ProfileView`); аккаунт показывает `SiteNav`. Калибровка громкости микрофона —
+`/calibration` (`CalibrationView`, `?next=` — куда вернуться).
 
 ## Слои приложения
 
@@ -21,7 +22,7 @@
 src/
   router/            конфиг маршрутов
   views/             экраны верхнего уровня (TrainingsView, LabView, AuthView,
-                     ProfileView, NotFoundView)
+                     ProfileView, CalibrationView, NotFoundView)
   lib/               клиенты внешних сервисов: supabase.ts — клиент или null;
                      database.types.ts — типы схемы (генерируются); avatar.ts —
                      фото в квадрат 320 px JPEG
@@ -74,6 +75,9 @@ src/
                      useAuth — пользователь Supabase, вход/регистрация/выход,
                      сброс пароля (состояние одно на приложение, как у
                      useCustomTrainings); useProfile — профиль и фото;
+                     useCalibration — калибровки громкости по входу (localStorage,
+                     `{ version, data }`); useCalibrationRun — прохождение
+                     калибровки: тишина и три ноты;
                      useCustomTrainings — тренировки (в аккаунте Supabase, без
                      него — в localStorage в конверте { version, data }) и
                      ссылка на них; useTrainingScore — оценка
@@ -88,6 +92,9 @@ src/
                      условия, перевод в PitchTarget, разбор черновика;
                      profile.ts — тип пользователя (ученик/учитель), пределы
                      описания и фото;
+                     calibration.ts — калибровка громкости: кривая dBFS → 0…1
+                     через три ноты (центры зон), порог голоса от шума, проверки,
+                     «нота держится»;
                      customTraining.ts — упаковка тренировки в параметр
                      `d` ссылки /custom-training и обратно;
                      customRun.ts — прогон собранной тренировки: такты по
@@ -123,7 +130,8 @@ src/
   `tsconfig.web.json` и видит только `.d.ts`, никогда не пересобирает
   исходники движка напрямую. Импорт — `@audio-core/*`.
 - У движка отдельный набор тестов: `npm run test:core` (Vitest, root
-  `src/audio-core`).
+  `src/audio-core`). Логика приложения без звука — `npm run test:app`
+  (`src/training/__tests__`).
 - Документация движка — на русском, код и комментарии — на английском
   (сквозное правило всего проекта).
 
@@ -156,7 +164,10 @@ tracks, метроном) выпилен; тренировки, которым �
   `listen` сначала открывается микрофон, чтобы первые такты уже слушались.
   Отдаёт `clock` (позиция в такте по слышимому времени), `level` (с плавным
   спадом), `rawLevel` (последний кадр как есть), `averageLevel` (среднее по мощности
-  за секунду) и `pitch` (окно кадров высоты для графиков), `setNotes`,
+  за секунду) и `pitch` (окно кадров высоты для графиков), `rawDbfs`,
+  `averageDbfs`, `peakDbfs` (те же величины в dBFS до калибровки), `input`,
+  `inputKey`, `calibration` (калибровка открытого входа; без неё шкала −60…0
+  dBFS и порог голоса −55 dBFS), `setNotes`,
   `startListening`/`stopListening` (микрофон без воспроизведения — так
   работает `/lab`), `traceTimeOf` и `scoreNotes`.
 - **Одни часы для звука и микрофона.** Ворклет захвата нумерует семплы от
