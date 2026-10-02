@@ -36,6 +36,16 @@ export const NOTE_LENGTHS: readonly NoteLengthOption[] = [
 ]
 
 export const NOTE_LENGTH_DEFAULT = 4
+/** Longest element, sixteenths: a whole note. Any whole number of sixteenths up to it is a length. */
+export const MAX_SIXTEENTHS = 16
+
+/** A length as a musician names it: «1/4», «1/8.» for a dotted eighth, «5/16» otherwise. */
+export function lengthLabel(sixteenths: number): string {
+  const plain = NOTE_LENGTHS.find((option) => option.sixteenths === sixteenths)
+  if (plain !== undefined) return plain.label
+  const dotted = NOTE_LENGTHS.find((option) => option.sixteenths * 1.5 === sixteenths)
+  return dotted !== undefined ? `${dotted.label}.` : `${sixteenths}/16`
+}
 
 /** Octaves the note pad reaches, scientific: 4 is C4–B4. */
 export const OCTAVE_MIN = 2
@@ -101,6 +111,16 @@ export interface NoteElement {
   readonly midi: number
   readonly kind: NoteKind
   readonly sixteenths: number
+  /**
+   * Sung on from the note before it, at its pitch, without a new onset: one note held over a bar
+   * line is written as two tied together.
+   */
+  readonly tie?: boolean
+}
+
+/** Whether `element` goes on the note before it rather than starting a new one. */
+export function isTied(element: BarElement | undefined, before: BarElement | undefined): boolean {
+  return isNote(element) && element.tie === true && isNote(before) && before.midi === element.midi
 }
 
 /** Silence in the bar. */
@@ -154,6 +174,24 @@ export interface BuilderBar {
 export const TITLE_MAX = 80
 export const DESCRIPTION_MAX = 1000
 
+/** The metronome's second layer: `count` even pulses over every `beats` beats (3 over 2…). */
+export interface PulseLayer {
+  readonly count: number
+  readonly beats: number
+}
+
+export const PULSES_MAX = 12
+export const PULSE_BEATS_MAX = 8
+
+/** A pulse layer read back from storage or a link; null when there is none. */
+export function parsePulse(value: unknown): PulseLayer | null {
+  if (typeof value !== 'object' || value === null) return null
+  const { count, beats } = value as Record<string, unknown>
+  const whole = (n: unknown, max: number): n is number =>
+    typeof n === 'number' && Number.isInteger(n) && n >= 1 && n <= max
+  return whole(count, PULSES_MAX) && whole(beats, PULSE_BEATS_MAX) ? { count, beats } : null
+}
+
 export interface TrainingDraft {
   readonly title: string
   /** What to do and why, shown to whoever opens the training's link. */
@@ -169,6 +207,8 @@ export interface TrainingDraft {
   readonly repeats: readonly Repeat[]
   /** The bar being filled. */
   readonly current: readonly BarElement[]
+  /** The pulse the training is sung against, besides the beats; none for most. */
+  readonly pulse?: PulseLayer | null
 }
 
 /** A reprise: bars `from`…`to` (indexes, inclusive) played `times` times in a row. */
@@ -309,6 +349,7 @@ export function noteSegments(
 /**
  * The bars as pitch-chart targets from time `start`, seconds, at `bpm`. A slide glides into the
  * next note only when that note follows straight after it; before a rest or at the end it is held.
+ * Notes tied over a bar line are one target.
  */
 export function toTargets(
   bars: readonly (readonly BarElement[])[],
@@ -324,11 +365,13 @@ export function toTargets(
     const seconds = element.sixteenths * perSixteenth
     if (isNote(element)) {
       const next = pitchOf(elements[index + 1])
-      targets.push({
-        midi: element.midi,
-        start: time,
-        segments: noteSegments(element, seconds, next),
-      })
+      const segments = noteSegments(element, seconds, next)
+      const held = targets.at(-1)
+      if (held !== undefined && isTied(element, elements[index - 1])) {
+        targets[targets.length - 1] = { ...held, segments: [...held.segments, ...segments] }
+      } else {
+        targets.push({ midi: element.midi, start: time, segments })
+      }
     }
     time += seconds
   })
@@ -392,6 +435,27 @@ export function pitchSpan(elements: readonly BarElement[]): { low: number; high:
   return { low: Math.min(...pitches), high: Math.max(...pitches) }
 }
 
+/** How far a training may be moved up or down to suit a voice, semitones. */
+export const TRANSPOSE_LIMIT = 12
+
+/**
+ * The same training moved by `semitones`: every note shifts by exactly that much, so the melody
+ * keeps its shape whatever key it lands in, notes outside any scale included. Rests and breaths
+ * stay put; breaths hang from the notes around them, so they follow.
+ */
+export function transposeDraft(draft: TrainingDraft, semitones: number): TrainingDraft {
+  if (semitones === 0) return draft
+  const move = (elements: readonly BarElement[]): BarElement[] =>
+    elements.map((element) =>
+      isNote(element) ? { ...element, midi: element.midi + semitones } : element,
+    )
+  return {
+    ...draft,
+    bars: draft.bars.map((bar) => ({ ...bar, elements: move(bar.elements) })),
+    current: move(draft.current),
+  }
+}
+
 export const EMPTY_DRAFT: TrainingDraft = {
   title: '',
   description: '',
@@ -411,8 +475,14 @@ export const EMPTY_DRAFT: TrainingDraft = {
 function parseElement(value: unknown): BarElement | null {
   if (typeof value !== 'object' || value === null) return null
   const raw = value as Record<string, unknown>
-  const sixteenths = NOTE_LENGTHS.find((option) => option.sixteenths === raw.sixteenths)?.sixteenths
-  if (sixteenths === undefined) return null
+  const sixteenths = raw.sixteenths
+  if (
+    typeof sixteenths !== 'number' ||
+    !Number.isInteger(sixteenths) ||
+    sixteenths < 1 ||
+    sixteenths > MAX_SIXTEENTHS
+  )
+    return null
   const type =
     typeof raw.type === 'string'
       ? raw.type
@@ -424,7 +494,8 @@ function parseElement(value: unknown): BarElement | null {
   if (type === 'rest' || type === 'inhale' || type === 'exhale') return { type, sixteenths }
   if (type !== 'note' || typeof raw.midi !== 'number') return null
   const kind = NOTE_KINDS.find((option) => option.kind === raw.kind)?.kind ?? 'hold'
-  return { type: 'note', midi: Math.round(raw.midi), kind, sixteenths }
+  const note = { type: 'note' as const, midi: Math.round(raw.midi), kind, sixteenths }
+  return raw.tie === true ? { ...note, tie: true } : note
 }
 
 /**
@@ -472,5 +543,6 @@ export function parseDraft(value: unknown): TrainingDraft | null {
     current: elementsOf(raw.current).filter(
       (_, index, elements) => barFill(elements.slice(0, index + 1)) < capacity,
     ),
+    pulse: parsePulse(raw.pulse),
   }
 }

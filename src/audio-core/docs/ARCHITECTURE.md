@@ -33,7 +33,7 @@ audio-core/
     transport/          протокол сообщений, BufferPool, FrameBatcher, TimelineMirror — без DOM
     session/            PcmTape (горячее кольцо + холодные int16), WAV, Session/Take, офлайн-проход
     segmentation/       паузы → фразы → ноты (greedy или Mauch 2015) и слайды; жесты питча
-    synthesis/          PCM щелчка и тона, metronomeClicks, referenceTriggers
+    synthesis/          PCM щелчка и тона, metronomeClicks, referenceTriggers; shiftPitch (TD-PSOLA)
     scoring/            онсеты, estimateLatency, scoreTake (питч / ритм / уровень)
     testing/            генераторы сигналов и сравнение контуров — только для тестов
     index.ts            публичная поверхность

@@ -26,11 +26,12 @@ export type { GridChange, GridSegment, GridWindow, MapPosition } from './clock/t
 export { TempoMap } from './clock/tempo-map'
 
 // synthesis
-export type { ClickEvent, ClickLevel } from './synthesis/metronome'
-export { beatsPerGroup, metronomeClicks } from './synthesis/metronome'
+export type { ClickEvent, ClickLevel, PulseEvent } from './synthesis/metronome'
+export { beatsPerGroup, metronomeClicks, pulseClicks } from './synthesis/metronome'
 export type { NoteTrigger } from './synthesis/reference'
 export { majorArpeggio, referenceTriggers } from './synthesis/reference'
-export { renderClick } from './synthesis/click'
+export { renderClick, renderPulse } from './synthesis/click'
+export { shiftPitch, type PitchShiftSpec } from './synthesis/pitch-shift'
 export { TONE_RELEASE_SECONDS, renderTone } from './synthesis/tone'
 
 // scoring

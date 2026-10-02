@@ -26,3 +26,25 @@ export function renderClick(sampleRate: number, level: ClickLevel): Float32Array
   }
   return out
 }
+
+/**
+ * The second layer's pulse: a short burst of brightened noise from a fixed seed, like a closed
+ * hi-hat, so it never blurs with the pitched beat click. A little stronger on the beat.
+ */
+export function renderPulse(sampleRate: number, onBeat: boolean): Float32Array {
+  const seconds = 0.04
+  const n = Math.max(1, Math.round(sampleRate * seconds))
+  const out = new Float32Array(n)
+  const peak = onBeat ? 0.5 : 0.36
+  let seed = 0x2545f491
+  let previous = 0
+  for (let i = 0; i < n; i++) {
+    seed = (Math.imul(seed, 1664525) + 1013904223) | 0
+    const noise = (seed >>> 8) / 0x800000 - 1
+    // A first difference tilts the noise towards the top, where a hi-hat lives.
+    const bright = (noise - previous) / 2
+    previous = noise
+    out[i] = peak * Math.exp((-110 * i) / sampleRate) * bright
+  }
+  return out
+}

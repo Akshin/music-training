@@ -51,3 +51,42 @@ export function metronomeClicks(
     }
   })
 }
+
+/** A pulse of the metronome's second layer. */
+export interface PulseEvent {
+  /** Session/grid time in seconds. */
+  readonly time: number
+  /** Cycle of `beats` beats the pulse belongs to, counted from the grid origin. */
+  readonly cycle: number
+  /** Pulse inside its cycle, `0 … count-1`; 0 falls on the cycle's first beat. */
+  readonly index: number
+}
+
+/**
+ * The second layer: `count` even pulses over every `beats` beats, cycles starting on beat 0 — 2
+ * over 1 is eighths, 3 over 1 triplets, 3 over 2 the three-against-two polyrhythm. The pulse that
+ * starts a cycle is included, so the layer holds the time on its own when the beat clicks are off.
+ */
+export function pulseClicks(
+  grid: BeatGrid,
+  fromSeconds: number,
+  toSeconds: number,
+  count: number,
+  beats = 1,
+): PulseEvent[] {
+  const pulses = Math.max(1, Math.round(count))
+  const span = Math.max(1, Math.round(beats))
+  const perBeat = pulses / span
+  const first = Math.ceil(grid.secondsToBeat(fromSeconds) * perBeat - 1e-9)
+  const end = Math.ceil(grid.secondsToBeat(toSeconds) * perBeat - 1e-9)
+  const events: PulseEvent[] = []
+  for (let pulse = first; pulse < end; pulse++) {
+    const cycle = Math.floor(pulse / pulses)
+    events.push({
+      time: grid.beatToSeconds((pulse * span) / pulses),
+      cycle: cycle + 0,
+      index: pulse - cycle * pulses,
+    })
+  }
+  return events
+}

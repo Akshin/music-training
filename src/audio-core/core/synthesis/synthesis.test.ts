@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest'
 
 import { BeatGrid } from '../clock/beat-grid'
 import { midiToHz } from '../model/pitch'
-import { renderClick } from './click'
-import { metronomeClicks } from './metronome'
+import { renderClick, renderPulse } from './click'
+import { metronomeClicks, pulseClicks } from './metronome'
 import { majorArpeggio, referenceTriggers } from './reference'
 import { renderTone, TONE_RELEASE_SECONDS } from './tone'
 
@@ -106,5 +106,57 @@ describe('referenceTriggers', () => {
       ['off', 64],
       ['on', 67],
     ])
+  })
+})
+
+describe('pulseClicks', () => {
+  const grid = new BeatGrid({ bpm: 120, meter: { beatsPerBar: 4, beatUnit: 4 } })
+
+  it('splits every beat evenly, the beat itself included', () => {
+    const eighths = pulseClicks(grid, 0, 1, 2)
+    expect(eighths.map((pulse) => pulse.time)).toEqual([0, 0.25, 0.5, 0.75])
+    expect(eighths.map((pulse) => [pulse.cycle, pulse.index])).toEqual([
+      [0, 0],
+      [0, 1],
+      [1, 0],
+      [1, 1],
+    ])
+  })
+
+  it('plays triplets', () => {
+    const triplets = pulseClicks(grid, 0.5, 1, 3)
+    expect(triplets).toHaveLength(3)
+    expect(triplets[1]!.time).toBeCloseTo(0.5 + 0.5 / 3)
+    expect(triplets.map((pulse) => pulse.index)).toEqual([0, 1, 2])
+  })
+
+  it('spreads pulses over several beats: three against two', () => {
+    const cycle = pulseClicks(grid, 0, 2, 3, 2)
+    expect(cycle.map((pulse) => pulse.time)).toEqual([0, 1 / 3, 2 / 3, 1, 4 / 3, 5 / 3])
+    expect(cycle.map((pulse) => pulse.index)).toEqual([0, 1, 2, 0, 1, 2])
+    expect(cycle[3]!.cycle).toBe(1)
+  })
+
+  it('takes each pulse once across consecutive windows', () => {
+    const joined = [...pulseClicks(grid, 0, 0.3, 5, 4), ...pulseClicks(grid, 0.3, 0.7, 5, 4)]
+    expect(joined.map((pulse) => pulse.time)).toEqual(
+      pulseClicks(grid, 0, 0.7, 5, 4).map((pulse) => pulse.time),
+    )
+  })
+})
+
+describe('renderPulse', () => {
+  it('is the same every time, bounded, and dies away', () => {
+    const pulse = renderPulse(48000, false)
+    expect(renderPulse(48000, false)).toEqual(pulse)
+    expect(Math.max(...pulse.map(Math.abs))).toBeLessThanOrEqual(0.5)
+    const head = Math.max(...pulse.slice(0, 200).map(Math.abs))
+    const tail = Math.max(...pulse.slice(-200).map(Math.abs))
+    expect(tail).toBeLessThan(head / 4)
+  })
+
+  it('is stronger on the beat', () => {
+    const peak = (samples: Float32Array) => Math.max(...samples.map(Math.abs))
+    expect(peak(renderPulse(48000, true))).toBeGreaterThan(peak(renderPulse(48000, false)))
   })
 })

@@ -149,6 +149,13 @@ const router = createRouter({
       meta: { title: 'Лаборатория' },
     },
     {
+      // Opened from a link in a lesson, so no account is needed.
+      path: '/lab/sing',
+      name: 'sing',
+      component: () => import('@/views/SingView.vue'),
+      meta: { title: 'Пой и смотри', public: true },
+    },
+    {
       path: '/:pathMatch(.*)*',
       name: 'not-found',
       component: () => import('@/views/NotFoundView.vue'),

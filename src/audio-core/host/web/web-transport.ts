@@ -16,7 +16,7 @@ import {
   type MapPosition,
 } from '../../core/clock/tempo-map'
 import type { NoteEvent } from '../../core/model/note'
-import { metronomeClicks, type ClickEvent } from '../../core/synthesis/metronome'
+import { metronomeClicks, pulseClicks, type ClickEvent } from '../../core/synthesis/metronome'
 import { referenceTriggers } from '../../core/synthesis/reference'
 import { WebSynth } from './web-synth'
 
@@ -44,6 +44,9 @@ export class WebTransport {
   private cursor = 0
   private map: TempoMap | undefined
   private clicks = false
+  /** The second layer: `pulses` over every `pulseBeats` beats; 0 pulses keep it silent. */
+  private pulses = 0
+  private pulseBeats = 1
   private notes: readonly NoteEvent[] = []
   private notesEpoch = 0
   /** Note-ons handed to the synth, keyed by epoch/beat/pitch, with their grid time. */
@@ -98,6 +101,16 @@ export class WebTransport {
   }
 
   /**
+   * The second layer from the next scheduled window: `count` even pulses over every `beats` beats
+   * — 2 over 1 eighths, 3 over 1 triplets, 3 over 2 a polyrhythm — or 0 for none. Independent of
+   * the beat clicks.
+   */
+  setPulses(count: number, beats = 1): void {
+    this.pulses = Math.max(0, Math.round(count))
+    this.pulseBeats = Math.max(1, Math.round(beats))
+  }
+
+  /**
    * Replace the reference notes, their beats counted within tempo-map `epoch`. Note-ons of the new
    * list that fall in the stretch already scheduled are scheduled at once, so notes handed over a
    * moment late still start on time; a note-on is never scheduled twice.
@@ -132,6 +145,7 @@ export class WebTransport {
     if (to <= this.cursor) return
     for (const span of this.map.windows(this.cursor, to)) {
       if (this.clicks) this.scheduleClicks(span.grid, span.from, span.to)
+      if (this.pulses > 0) this.schedulePulses(span.grid, span.from, span.to)
       this.scheduleNotes(span)
     }
     this.cursor = to
@@ -146,6 +160,12 @@ export class WebTransport {
       this.synth.click(this.audioOrigin + click.time, click.level)
       this.scheduled.push(click)
       this.onClick?.(click)
+    }
+  }
+
+  private schedulePulses(grid: BeatGrid, from: number, to: number): void {
+    for (const pulse of pulseClicks(grid, from, to, this.pulses, this.pulseBeats)) {
+      this.synth.pulse(this.audioOrigin + pulse.time, pulse.index === 0)
     }
   }
 

@@ -13,9 +13,11 @@ import { WebTransport } from '@audio-core/host/web/web-transport'
 import { WorkerHost } from '@audio-core/host/web/worker-host'
 import { MicSource, type MicSourceInfo } from '@audio-core/io/mic-source'
 import { EMPTY_PITCH_TRACE, type PitchTrace } from '@/components/pitch/trace'
+import { openSavedTake, saveTake, type SavedTake, type TakeStore } from '@/composables/savedTake'
 import { useCalibration } from '@/composables/useCalibration'
 import { VOICE_FLOOR_DB, inputKey, levelMap, voiceFloorDb } from '@/training/calibration'
 import { BEATS_DEFAULT, BPM_DEFAULT, meterFor } from '@/training/tempo'
+import { hasVibrato, noteEdges, splitAtDips, type SungNote } from '@/training/architect'
 import type { Timbre } from '@/training/timbre'
 
 /** Musical position the listener hears right now, or `null` while the transport is stopped. */
@@ -28,12 +30,28 @@ export interface ExerciseSessionOptions {
   readonly beats?: Ref<number>
   /** Audible clicks; the clock keeps running without them. */
   readonly clicks?: Ref<boolean>
+  /** Loudness of the clicks, 0…1 on a perceptual scale. Default 1. */
+  readonly clickVolume?: Readonly<Ref<number>>
+  /**
+   * The metronome's second layer: this many even pulses over every `pulseBeats` beats (2 over 1
+   * eighths, 3 over 2 three against two), or 0 for none. Default 0.
+   */
+  readonly pulses?: Readonly<Ref<number>>
+  /** Beats one cycle of those pulses spans. Default 1. */
+  readonly pulseBeats?: Readonly<Ref<number>>
+  /** Loudness of those pulses, 0…1 on a perceptual scale. Default 1. */
+  readonly pulseVolume?: Readonly<Ref<number>>
   /** URL of the recording to loop under the exercise (a backing pad), or `null` for none. */
   readonly backing?: Readonly<Ref<string | null>>
   /** Open the microphone when playing starts; playback waits for it so the first bars are heard. */
   readonly listen?: boolean
   /** Seconds the average loudness is taken over. Default 1 — what calibration measures notes by. */
   readonly averageSeconds?: number
+  /**
+   * Keep the whole take — every frame and the voice itself — until the next one starts, also after
+   * the microphone stops, so it can be looked through and listened to (`take`).
+   */
+  readonly keepTake?: boolean
 }
 
 /** Seconds the meter level takes to fall from full to empty once the sound stops. Rises are instant. */
@@ -46,6 +64,12 @@ const TRACE_SECONDS = 10
 const SCORE_MARGIN_SECONDS = 0.5
 /** Frames averaged into the harmonic levels (80 ms): single frames jitter by a few dB. */
 const TIMBRE_FRAMES = 8
+/** A glide out of a note lands in the next one within this, seconds. */
+const GLIDE_GAP_SECONDS = 0.15
+/** How far around a note of the take a scoop or a fall is looked for, seconds. */
+const TAKE_EDGE_SECONDS = 0.12
+/** Unvoiced gap a note of the take bridges when turned into notes, ms. */
+const TAKE_NOTE_GAP_MS = 40
 /** Encoded backing files kept in memory (a few MB each); decoded audio is kept for one only. */
 const FETCHED_LIMIT = 2
 
@@ -64,6 +88,12 @@ export function useExerciseSession(options: ExerciseSessionOptions = {}) {
   const bpm = options.bpm ?? ref(BPM_DEFAULT)
   const beats = options.beats ?? ref(BEATS_DEFAULT)
   const clicks = options.clicks ?? ref(true)
+  const clickVolume = options.clickVolume ?? ref(1)
+  const pulses = options.pulses ?? ref(0)
+  const pulseBeats = options.pulseBeats ?? ref(1)
+  const pulseVolume = options.pulseVolume ?? ref(1)
+  /** A slider's position squared: equal steps sound like equal steps. */
+  const gain = (volume: Readonly<Ref<number>>) => Math.min(1, Math.max(0, volume.value)) ** 2
   const backing = options.backing ?? ref<string | null>(null)
   const averageSeconds = options.averageSeconds ?? AVERAGE_SECONDS
 
@@ -89,6 +119,9 @@ export function useExerciseSession(options: ExerciseSessionOptions = {}) {
 
   let mic: MicSource | null = null
   let host: WorkerHost | null = null
+  /** The finished take, kept after the microphone stopped (`keepTake`). */
+  let kept: TakeStore | null = null
+  let takeDbfs = new Float32Array(0)
   let micStarting: Promise<void> | null = null
   let micRun = 0
   /** AudioContext time of capture sample 0 — the zero of the trace clock. */
@@ -134,6 +167,9 @@ export function useExerciseSession(options: ExerciseSessionOptions = {}) {
     const run = ++playRun
     const ctx = audioContext()
     const player = (transport ??= new WebTransport(ctx))
+    player.synth.setClickVolume(gain(clickVolume))
+    player.synth.setPulseVolume(gain(pulseVolume))
+    player.setPulses(pulses.value, pulseBeats.value)
     loop ??= new WebLoop(ctx)
     if (options.listen === true) await startListening()
     if (run !== playRun) return
@@ -173,6 +209,7 @@ export function useExerciseSession(options: ExerciseSessionOptions = {}) {
     const ctx = audioContext()
     const source = new MicSource({ context: ctx })
     mic = source
+    discardTake()
     try {
       const info = await source.start()
       // The capture worklet counts samples from its first render quantum, which is about now.
@@ -183,9 +220,15 @@ export function useExerciseSession(options: ExerciseSessionOptions = {}) {
       }
       const worker = new WorkerHost({
         sampleRate: info.sampleRate,
-        features: ['level', 'pitch', 'harmonics'],
+        // A kept take is turned into notes later, so it also measures vibrato.
+        features: [
+          'level',
+          'pitch',
+          'harmonics',
+          ...(options.keepTake === true ? ['vibrato'] : []),
+        ],
         options: { f0: { tracker: 'pyin' } },
-        record: false,
+        record: options.keepTake === true,
       })
       host = worker
       worker.onError((message) => {
@@ -221,7 +264,8 @@ export function useExerciseSession(options: ExerciseSessionOptions = {}) {
     const source = mic
     host = null
     mic = null
-    worker?.dispose()
+    if (options.keepTake === true && worker !== null) kept = worker
+    else worker?.dispose()
     await source?.stop()
     shown = 0
     level.value = 0
@@ -323,6 +367,38 @@ export function useExerciseSession(options: ExerciseSessionOptions = {}) {
     return transport.audioOrigin - captureOrigin + roundTrip
   }
 
+  /**
+   * A recording played on the exercise's clock, its first sample at `gridSeconds` from beat 0, in
+   * time with the clicks, `rate` times as fast; already begun, it starts part way in. Returns what
+   * stops it.
+   */
+  function playClip(
+    samples: Float32Array,
+    sampleRate: number,
+    gridSeconds: number,
+    rate = 1,
+  ): () => void {
+    const ctx = context
+    const player = transport
+    if (ctx === null || player === null || !player.running || samples.length === 0) return () => {}
+    const buffer = ctx.createBuffer(1, samples.length, sampleRate)
+    buffer.copyToChannel(samples as Float32Array<ArrayBuffer>, 0)
+    const node = ctx.createBufferSource()
+    node.buffer = buffer
+    node.playbackRate.value = rate
+    node.connect(ctx.destination)
+    const when = player.audioOrigin + gridSeconds
+    const late = Math.max(0, ctx.currentTime - when)
+    if (late * rate < buffer.duration) node.start(when + late, late * rate)
+    return () => {
+      try {
+        node.stop()
+      } catch {
+        // Never started, or already over.
+      }
+    }
+  }
+
   /** Trace-clock seconds of a grid moment (seconds from the transport's beat 0). */
   function traceTimeOf(gridSeconds: number): number | null {
     const offset = captureOffset()
@@ -354,6 +430,135 @@ export function useExerciseSession(options: ExerciseSessionOptions = {}) {
     )
     const { notes: sung } = segmentTake(worker.timeline, start, end)
     return scoreTake(targets, sung, grid, worker.timeline, { latencySeconds: offset, ...scoring })
+  }
+
+  /** The current take: the live one while listening, else the one kept after it stopped. */
+  function takeHost(): TakeStore | null {
+    return host ?? kept
+  }
+
+  function discardTake(): void {
+    kept?.dispose()
+    kept = null
+  }
+
+  /** The whole take, frame by frame and as sound (with `keepTake`; otherwise only while listening). */
+  const take = {
+    /** Frames so far; 0 without a take. */
+    length: (): number => takeHost()?.timeline.length ?? 0,
+    frameRate: (): number => takeHost()?.timeline.frameRate ?? 100,
+    /** Trace-clock seconds of frame `index`. */
+    timeOf: (index: number): number => takeHost()?.timeline.frameTime(index) ?? 0,
+    /**
+     * Pitch and loudness of frames `[begin, end)` into `midi` and `level`, as the pitch trace shows
+     * them: no pitch below the voice floor, loudness on the input's calibration.
+     */
+    read(begin: number, end: number, midi: Float32Array, level: Float32Array): void {
+      const worker = takeHost()
+      const count = Math.max(0, end - begin)
+      if (worker === null || count === 0) return
+      if (takeDbfs.length < count) takeDbfs = new Float32Array(count)
+      worker.timeline.slice('midi', begin, end, midi)
+      worker.timeline.slice('dbfs', begin, end, takeDbfs)
+      for (let i = 0; i < count; i++) {
+        const dbfs = takeDbfs[i] ?? -Infinity
+        if (!(dbfs >= voiceFloor)) midi[i] = NaN
+        level[i] = toLevel(dbfs)
+      }
+    },
+    /** The voice between two moments on the trace clock; null without a kept recording. */
+    async audio(
+      from: number,
+      to: number,
+    ): Promise<{ samples: Float32Array; sampleRate: number } | null> {
+      const worker = takeHost()
+      if (worker === null || options.keepTake !== true || to <= from) return null
+      const { sampleRate } = worker.timeline
+      const start = Math.max(0, Math.round(from * sampleRate))
+      const samples = await worker.readPcm(start, Math.round(to * sampleRate) - start)
+      return { samples, sampleRate }
+    },
+    /**
+     * Notes sung between two moments on the trace clock — the same segmentation scoring uses —
+     * with whether each glides into the next.
+     */
+    notes(from: number, to: number): SungNote[] {
+      const worker = takeHost()
+      if (worker === null || to <= from) return []
+      const { timeline } = worker
+      const { start, end } = timeline.range(from, to)
+      // A consonant between two sung notes of the same pitch is a short unvoiced gap; scoring
+      // bridges gaps up to 120 ms, which would fuse "mi-mi-mi" into one note, so only a dropout
+      // this short is bridged here.
+      const { notes, slides } = segmentTake(timeline, start, end, {
+        notes: { maxGapMs: TAKE_NOTE_GAP_MS },
+      })
+      const gliding = new Set(
+        slides.filter((slide) => slide.toNote !== undefined).map((slide) => slide.fromNote),
+      )
+      const vibratoMeasured = timeline.columns.includes('vibratoRate')
+      // Repeated notes of one pitch hold that pitch through the consonant between them, so they
+      // are told apart by the dip in loudness there. Scoops and falls are looked for around each
+      // piece, since the pitch finder often leaves them just outside the note.
+      const pad = Math.round(TAKE_EDGE_SECONDS * timeline.frameRate)
+      const found: SungNote[] = []
+      notes.forEach((note, index) => {
+        const midi = timeline.slice('midi', note.startFrame, note.endFrame)
+        const dbfs = timeline.slice('dbfs', note.startFrame, note.endFrame)
+        const pieces = splitAtDips(dbfs, midi, timeline.frameRate)
+        pieces.forEach((piece, part) => {
+          const from = note.startFrame + piece.start
+          const to = note.startFrame + piece.end
+          // The contour as the chart shows it: silence around the note is no pitch, not noise.
+          const around = Math.max(0, from - pad)
+          const stop = Math.min(timeline.length, to + pad)
+          const contour = new Float32Array(stop - around)
+          take.read(around, stop, contour, new Float32Array(stop - around))
+          const glides = part === pieces.length - 1 && gliding.has(index)
+          // Only a glide out of a note that was kept counts: the pitch finder may have cut a
+          // scoop off as a scrap of a note sliding into this one, and the scrap is dropped.
+          const previous = found.at(-1)
+          const glidedInto =
+            previous?.slide === true && timeline.frameTime(from) - previous.end < GLIDE_GAP_SECONDS
+          const edges = noteEdges(
+            contour,
+            from - around,
+            to - around,
+            piece.midi,
+            timeline.frameRate,
+          )
+          found.push({
+            midi: piece.midi,
+            start: timeline.frameTime(from),
+            end: timeline.frameTime(to),
+            slide: glides,
+            scoop: edges.scoop && !glidedInto,
+            fall: edges.fall && !glides,
+            vibrato:
+              vibratoMeasured &&
+              hasVibrato(
+                timeline.slice('vibratoRate', from, to),
+                timeline.slice('vibratoExtent', from, to),
+                timeline.frameRate,
+              ),
+          })
+        })
+      })
+      return found
+    },
+    /** Forget the kept take. */
+    discard: discardTake,
+    /** Seconds `from` to `to` of the take, frames and voice, to be kept after the page closes. */
+    async save(from: number, to: number): Promise<SavedTake | null> {
+      const store = takeHost()
+      return store === null || to <= from ? null : saveTake(store, from, to)
+    },
+    /** A take saved earlier becomes the kept one, while the microphone is off. */
+    restore(saved: SavedTake): void {
+      if (host !== null) return
+      discardTake()
+      kept = openSavedTake(saved)
+    },
   }
 
   /** Reference notes to play along the clicks, their beats counted within tempo-map `epoch`. */
@@ -422,6 +627,10 @@ export function useExerciseSession(options: ExerciseSessionOptions = {}) {
 
   watch(clicks, (on) => transport?.setMetronome(on))
 
+  watch(clickVolume, () => transport?.synth.setClickVolume(gain(clickVolume)))
+  watch(pulseVolume, () => transport?.synth.setPulseVolume(gain(pulseVolume)))
+  watch([pulses, pulseBeats], ([count, beats]) => transport?.setPulses(count, beats))
+
   // Download the chosen pad ahead of Play; decoding waits for the AudioContext.
   watch(
     backing,
@@ -437,7 +646,10 @@ export function useExerciseSession(options: ExerciseSessionOptions = {}) {
     transport?.stop()
     loop?.stop()
     const ctx = context
-    void stopListening().finally(() => ctx?.close())
+    void stopListening().finally(() => {
+      discardTake()
+      void ctx?.close()
+    })
   })
 
   const pitchView: Readonly<Ref<PitchTrace>> = pitch
@@ -473,8 +685,10 @@ export function useExerciseSession(options: ExerciseSessionOptions = {}) {
     setNotes,
     startListening,
     stopListening,
+    playClip,
     traceTimeOf,
     scoreNotes,
+    take,
   }
 }
 

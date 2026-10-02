@@ -196,6 +196,7 @@ function toggleMic(): void {
         <p class="head__lead">Компоненты на живых данных. Источник — микрофон.</p>
       </div>
       <div class="head__actions">
+        <RouterLink class="calibrate" :to="{ name: 'sing' }">Пой и смотри</RouterLink>
         <RouterLink class="calibrate" :to="{ name: 'calibration', query: { next: '/lab' } }">
           Калибровка микрофона
         </RouterLink>
