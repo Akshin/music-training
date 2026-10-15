@@ -6,6 +6,7 @@ import AboutPanel from '@/components/builder/AboutPanel.vue'
 import BarEntryPanel from '@/components/builder/BarEntryPanel.vue'
 import ConditionsPanel from '@/components/builder/ConditionsPanel.vue'
 import TimelinePanel from '@/components/builder/TimelinePanel.vue'
+import VoiceEntryPanel from '@/components/builder/VoiceEntryPanel.vue'
 import PitchRoll from '@/components/pitch/PitchRoll.vue'
 import { EMPTY_PITCH_TRACE } from '@/components/pitch/trace'
 import { useBuilderDraft } from '@/composables/useBuilderDraft'
@@ -102,6 +103,13 @@ async function seal() {
   )
 }
 
+/** Bars that were sung go straight to the end of the timeline; the bar being typed stays. */
+async function addSung(sung: BarElement[][]) {
+  builder.append(sung)
+  await nextTick()
+  timelinePanel.value?.scrollToEnd()
+}
+
 useBuilderKeys({
   note: (pitchClass) => add(entry.noteAt(pitchClass)),
   rest: () => add(entry.element('rest')),
@@ -121,7 +129,7 @@ useBuilderKeys({
         {{ title.trim() || 'Новая тренировка' }}
       </h1>
       <p class="page-lead">
-        Задай условия, набери ноты по тактам — заполненный такт уезжает в таймлайн.
+        Задай условия, набери ноты по тактам или напой их — заполненный такт уезжает в таймлайн.
       </p>
       <div class="save">
         <button
@@ -186,6 +194,8 @@ useBuilderKeys({
       @add="add"
       @undo="undo"
     />
+
+    <VoiceEntryPanel :builder="builder" :span="span" @sung="addSung" />
 
     <TimelinePanel ref="timelinePanel" :builder="builder" :span="span" />
 

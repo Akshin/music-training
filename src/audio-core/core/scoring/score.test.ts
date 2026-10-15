@@ -4,7 +4,7 @@ import { BeatGrid } from '../clock/beat-grid'
 import { Timeline } from '../model/timeline'
 import type { NoteSegment } from '../segmentation/types'
 import { estimateLatency } from './latency'
-import { onsetTimes } from './onsets'
+import { onsetTimes, pcmOnsets } from './onsets'
 import { scoreTake, velocityToDb } from './score'
 
 function span(start: number, end: number, midi: number): NoteSegment {
@@ -58,6 +58,60 @@ describe('onsetTimes', () => {
     expect(times).toHaveLength(2)
     expect(times[0]).toBeCloseTo(timeline.frameTime(40), 9)
     expect(times[1]).toBeCloseTo(timeline.frameTime(90), 9)
+  })
+})
+
+describe('pcmOnsets', () => {
+  const rate = 48000
+
+  /** Quiet noise with sounds dropped in: `[seconds, length, amplitude, hz?]`. */
+  function signal(seconds: number, sounds: [number, number, number, number?][]): Float32Array {
+    const samples = new Float32Array(Math.round(seconds * rate))
+    let seed = 7
+    for (let i = 0; i < samples.length; i++) {
+      seed = (seed * 1103515245 + 12345) % 2147483648
+      samples[i] = (seed / 2147483648 - 0.5) * 0.001
+    }
+    for (const [at, length, amplitude, hz] of sounds) {
+      const from = Math.round(at * rate)
+      for (let i = 0; i < Math.round(length * rate); i++) {
+        const decay = hz === undefined ? Math.exp(-i / (0.002 * rate)) : 1
+        const wave =
+          hz === undefined ? (i % 2 === 0 ? 1 : -1) : Math.sin((2 * Math.PI * hz * i) / rate)
+        samples[from + i] += amplitude * decay * wave
+      }
+    }
+    return samples
+  }
+
+  it('finds clicks to the sample and ignores their echo', () => {
+    const clicks = [0.2, 0.95, 1.7, 2.45]
+    const samples = signal(3, [
+      ...clicks.map((at): [number, number, number] => [at, 0.01, 0.5]),
+      // An echo of the second click 40 ms later.
+      [0.99, 0.01, 0.2],
+    ])
+    const found = pcmOnsets(samples, rate)
+    expect(found).toHaveLength(clicks.length)
+    found.forEach((at, i) => expect(Math.abs(at - clicks[i])).toBeLessThan(0.0005))
+  })
+
+  it('finds a sung syllable where it starts, once', () => {
+    const found = pcmOnsets(
+      signal(1.5, [
+        [0.3, 0.4, 0.3, 220],
+        [0.9, 0.4, 0.3, 247],
+      ]),
+      rate,
+    )
+    expect(found).toHaveLength(2)
+    expect(Math.abs(found[0] - 0.3)).toBeLessThan(0.002)
+    expect(Math.abs(found[1] - 0.9)).toBeLessThan(0.002)
+  })
+
+  it('finds nothing in silence', () => {
+    expect(pcmOnsets(signal(1, []), rate)).toEqual([])
+    expect(pcmOnsets(new Float32Array(10), rate)).toEqual([])
   })
 })
 

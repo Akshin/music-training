@@ -89,4 +89,22 @@ describe('Timeline', () => {
     expect(timeline.range(t(45), 100)).toEqual({ start: 45, end: 50 })
     expect(timeline.range(200, 300)).toEqual({ start: 50, end: 50 })
   })
+
+  it('reads a lagging column back at the frames it describes', () => {
+    const timeline = new Timeline({ ...spec, lags: { f0: 2 } })
+    for (let i = 0; i < 6; i++) {
+      timeline.append()
+      timeline.set('f0', i, 100 + i)
+      timeline.set('rms', i, i)
+    }
+    expect(timeline.lag('f0')).toBe(2)
+    expect(timeline.lag('rms')).toBe(0)
+    // f0 written at frame 2 describes frame 0; the last two frames are not described yet.
+    expect(timeline.alignedGet('f0', 0)).toBe(102)
+    expect(timeline.alignedGet('f0', 4)).toBeNaN()
+    expect(Array.from(timeline.alignedSlice('f0', 1, 6))).toEqual([103, 104, 105, NaN, NaN])
+    expect(Array.from(timeline.alignedSlice('rms', 1, 4))).toEqual([1, 2, 3])
+    expect(() => new Timeline({ ...spec, lags: { pitch: 1 } })).toThrow(/unknown/)
+    expect(() => new Timeline({ ...spec, lags: { f0: 1.5 } })).toThrow(RangeError)
+  })
 })

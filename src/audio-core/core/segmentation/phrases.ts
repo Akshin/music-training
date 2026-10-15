@@ -45,6 +45,11 @@ const DEFAULTS = {
   voicingThreshold: 0.5,
 } as const
 
+/** Shortest sound that counts as a phrase, seconds: anything shorter is not reported yet. */
+export function minPhraseSeconds(options: PhraseOptions = {}): number {
+  return (options.minPhraseMs ?? DEFAULTS.minPhraseMs) / 1000
+}
+
 /** Value below which `share` of the (finite) values lie. */
 export function percentile(values: Float32Array, share: number): number {
   const finite = Array.from(values).filter((v) => Number.isFinite(v))
@@ -91,9 +96,9 @@ export function segmentPhrases(
   const end = Math.min(endFrame, timeline.length)
   const start = Math.max(0, Math.min(startFrame, end))
   const count = end - start
-  const level = timeline.slice(levelColumn, start, end)
+  const level = timeline.alignedSlice(levelColumn, start, end)
   const confidence = timeline.columns.includes(confidenceColumn)
-    ? timeline.slice(confidenceColumn, start, end)
+    ? timeline.alignedSlice(confidenceColumn, start, end)
     : undefined
 
   const noiseFloorDb = count === 0 ? NaN : percentile(level, 0.1)

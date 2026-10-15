@@ -8,6 +8,7 @@ import {
   inLoudnessZone,
   judgeNote,
   passOf,
+  runBarBeat,
   runBarNotes,
   summarize,
   type NoteResult,
@@ -26,8 +27,6 @@ export interface TrainingScoreOptions {
   readonly epoch: Readonly<Ref<number>>
 }
 
-/** Wait after a bar ends before scoring it: analysis runs a little behind the sound. */
-const SCORE_DELAY_MS = 450
 /** How far a sung onset may sit from its note and still be matched to it, seconds. */
 const MATCH_WINDOW_SECONDS = 0.35
 /** Passes kept in the summary list. */
@@ -42,30 +41,30 @@ export function useTrainingScore(options: TrainingScoreOptions) {
   const { session, plan, loudness, sequence, epoch } = options
   const results = ref<NoteResult[]>([])
   const passes = ref<PassSummary[]>([])
-  const timers = new Set<number>()
-
-  function clearTimers(): void {
-    for (const timer of timers) window.clearTimeout(timer)
-    timers.clear()
-  }
+  /** Bumped by every Play and Stop: a bar still waiting for its frames from before is dropped. */
+  let run = 0
 
   watch(session.playing, (on) => {
-    clearTimers()
+    run++
     if (on) {
       results.value = []
       passes.value = []
     }
   })
 
-  // A bar is scored once the next one starts, a little later so its last frames are analysed.
+  // A bar is scored once the next one starts and the analysis, which runs behind the sound, has
+  // caught up with the end of it.
   watch([sequence, epoch], ([next, nextEpoch], [previous, previousEpoch]) => {
     if (!session.playing.value || nextEpoch !== previousEpoch) return
     if (next !== previous + 1 || previous < 0) return
-    const timer = window.setTimeout(() => {
-      timers.delete(timer)
-      scoreBar(previous, nextEpoch)
-    }, SCORE_DELAY_MS)
-    timers.add(timer)
+    const grid = session.clock()?.grid
+    const end =
+      grid === undefined ? null : session.traceTimeOf(grid.beatToSeconds(runBarBeat(plan, next)))
+    if (end === null) return
+    const current = run
+    void session.notesReady(end).then((ready) => {
+      if (ready && current === run) scoreBar(previous, nextEpoch)
+    })
   })
 
   function scoreBar(bar: number, barEpoch: number): void {
@@ -110,7 +109,7 @@ export function useTrainingScore(options: TrainingScoreOptions) {
     }
   }
 
-  onScopeDispose(clearTimers)
+  onScopeDispose(() => run++)
 
   return {
     /** Notes judged so far in this pass and the one before, oldest first. */

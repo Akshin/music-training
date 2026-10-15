@@ -44,6 +44,11 @@ const DEFAULTS = {
   voicingThreshold: 0.5,
 } as const
 
+/** Seconds of sound after a note begins before the HMM keeps it (its shortest note). */
+export function mauchLookaheadSeconds(options: MauchOptions = {}): number {
+  return (options.minNoteMs ?? DEFAULTS.minNoteMs) / 1000
+}
+
 const LOG_EPS = -30
 const LOG_SILENCE_VOICED = Math.log(0.06)
 const LOG_NOTE_VOICED = Math.log(0.94)
@@ -132,9 +137,13 @@ function viterbi(
 
   for (let t = 0; t < count; t++) {
     const frame = startFrame + t
-    const midi = timeline.get(midiColumn, frame)
-    const dbfs = timeline.get(levelColumn, frame)
-    const conf = hasConf ? timeline.get(confidenceColumn, frame) : Number.isFinite(midi) ? 1 : 0
+    const midi = timeline.alignedGet(midiColumn, frame)
+    const dbfs = timeline.alignedGet(levelColumn, frame)
+    const conf = hasConf
+      ? timeline.alignedGet(confidenceColumn, frame)
+      : Number.isFinite(midi)
+        ? 1
+        : 0
     fillObs(obs, midi, dbfs, conf, cfg)
     const offset = t * nState
     for (let s = 0; s < nState; s++) {
@@ -199,7 +208,7 @@ function noteStats(
 } {
   const values: number[] = []
   for (let i = from; i < to; i++) {
-    const midi = timeline.get(midiColumn, i)
+    const midi = timeline.alignedGet(midiColumn, i)
     if (Number.isFinite(midi)) values.push(midi)
   }
   const mid = median(values)

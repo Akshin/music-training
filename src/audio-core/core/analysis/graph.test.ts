@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { defineExtractor, type AnyExtractor } from './extractor'
-import { collectColumns, resolveExtractors } from './graph'
+import { collectColumns, columnLags, resolveExtractors } from './graph'
 
 function stub(id: string, deps: AnyExtractor[] = [], columns: string[] = []): AnyExtractor {
   return defineExtractor<void>({
@@ -47,5 +47,30 @@ describe('collectColumns', () => {
     expect(collectColumns(resolveExtractors([b]))).toEqual(['x', 'y', 'z'])
     const clash = stub('c', [], ['x'])
     expect(() => collectColumns(resolveExtractors([a, clash]))).toThrow(/Column "x"/)
+  })
+})
+
+describe('columnLags', () => {
+  it('adds the own lag of an extractor to the largest lag of its inputs', () => {
+    const context = { sampleRate: 48000, frameSize: 2048, hopSize: 480 }
+    const lagging = (id: string, deps: AnyExtractor[], columns: string[]): AnyExtractor =>
+      defineExtractor<void, { delay: number }>({
+        id,
+        deps,
+        columns,
+        lag: (_context, options) => options?.delay ?? 0,
+        create: () => ({ process: () => undefined }),
+      })
+    const level = stub('level', [], ['rms'])
+    const tracker = lagging('tracker', [], ['f0'])
+    const pitch = stub('pitch', [tracker], ['midi'])
+    const mixed = lagging('mixed', [level, pitch], ['h1'])
+    const graph = resolveExtractors([mixed])
+    expect(columnLags(graph, context, { tracker: { delay: 5 }, mixed: { delay: 1 } })).toEqual({
+      f0: 5,
+      midi: 5,
+      h1: 6,
+    })
+    expect(columnLags(graph, context)).toEqual({})
   })
 })

@@ -1,5 +1,5 @@
 import { Yin } from '../../dsp/yin'
-import { PyinTracker } from '../../dsp/pyin'
+import { PYIN_DELAY_DEFAULT, PyinTracker } from '../../dsp/pyin'
 import { defineExtractor } from '../extractor'
 
 export interface F0Options {
@@ -36,6 +36,9 @@ export const f0 = defineExtractor<F0Result, F0Options>({
   id: 'f0',
   deps: [],
   columns: ['f0', 'f0Confidence'],
+  lag(_context, options) {
+    return options?.tracker === 'pyin' ? Math.max(0, options.pyinDelay ?? PYIN_DELAY_DEFAULT) : 0
+  },
   create({ sampleRate, frameSize }, options) {
     const voicingThreshold = options?.voicingThreshold ?? 0.5
     const yin = new Yin({

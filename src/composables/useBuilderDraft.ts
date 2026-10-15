@@ -95,6 +95,16 @@ export function useBuilderDraft(initial: TrainingDraft) {
     return bar
   }
 
+  /** Adds bars after the last one, as if each had been filled; a bar that is not full is left out. */
+  function append(added: readonly (readonly BarElement[])[]): BuilderBar[] {
+    const capacity = barCapacity(beats.value)
+    const full = added
+      .filter((elements) => barFill(elements) === capacity)
+      .map((elements): BuilderBar => ({ id: nextBarId++, elements: [...elements] }))
+    bars.value = [...bars.value, ...full]
+    return full
+  }
+
   function removeBar(id: number): void {
     const index = bars.value.findIndex((bar) => bar.id === id)
     if (index < 0) return
@@ -198,6 +208,7 @@ export function useBuilderDraft(initial: TrainingDraft) {
     add,
     undo,
     seal,
+    append,
     removeBar,
     clear,
     repeatFits,

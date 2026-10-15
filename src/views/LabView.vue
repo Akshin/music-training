@@ -9,6 +9,7 @@ import {
 } from '@phosphor-icons/vue'
 import MouthFigure from '@/components/face/MouthFigure.vue'
 import HarmonicStrings from '@/components/timbre/HarmonicStrings.vue'
+import LatencyPanel from '@/components/latency/LatencyPanel.vue'
 import SegmentedChoice, { type SegmentedOption } from '@/components/builder/SegmentedChoice.vue'
 import VolumeStrip from '@/components/volume/VolumeStrip.vue'
 import { loudnessColor } from '@/components/loudness'
@@ -370,6 +371,16 @@ function toggleMic(): void {
             />
           </div>
           <code class="specimen__name">MouthFigure · useMouthTracker</code>
+        </li>
+      </ul>
+    </section>
+
+    <section class="category" aria-labelledby="category-latency">
+      <h2 id="category-latency" class="category__title">Задержка</h2>
+      <ul class="specimens">
+        <li class="specimen specimen--wide">
+          <LatencyPanel />
+          <code class="specimen__name">LatencyPanel · useLatencyCalibration</code>
         </li>
       </ul>
     </section>

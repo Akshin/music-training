@@ -1,4 +1,4 @@
-import type { AnyExtractor } from './extractor'
+import type { AnalysisContext, AnyExtractor } from './extractor'
 
 /**
  * Orders the requested extractors and their transitive dependencies so that every extractor comes
@@ -28,6 +28,27 @@ export function resolveExtractors(requested: readonly AnyExtractor[]): AnyExtrac
 
   for (const extractor of requested) visit(extractor, [])
   return ordered
+}
+
+/**
+ * How many frames each column of an ordered graph runs behind: an extractor's own lag on top of
+ * the largest lag among its inputs, since it can only describe a frame once they all have.
+ */
+export function columnLags(
+  extractors: readonly AnyExtractor[],
+  context: AnalysisContext,
+  options: Readonly<Record<string, object>> = {},
+): Record<string, number> {
+  const byId = new Map<string, number>()
+  const lags: Record<string, number> = {}
+  for (const extractor of extractors) {
+    const inputs = Math.max(0, ...extractor.deps.map((dep) => byId.get(dep.id) ?? 0))
+    const own = Math.max(0, Math.round(extractor.lag?.(context, options[extractor.id]) ?? 0))
+    const lag = inputs + own
+    byId.set(extractor.id, lag)
+    for (const column of extractor.columns) if (lag > 0) lags[column] = lag
+  }
+  return lags
 }
 
 /** Collects the timeline columns of an ordered graph, rejecting duplicates. */

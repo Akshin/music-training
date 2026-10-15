@@ -54,6 +54,11 @@ export interface Extractor<TResult = unknown, TOptions extends object = object> 
   readonly deps: readonly AnyExtractor[]
   /** Timeline columns this extractor writes. Names must be unique across the graph. */
   readonly columns: readonly string[]
+  /**
+   * Frames its columns run behind the frame they are written at, on top of what its inputs
+   * already lag (see `TimelineSpec.lags`). Omitted: it describes the frame it is written at.
+   */
+  lag?(context: AnalysisContext, options?: Partial<TOptions>): number
   create(context: AnalysisContext, options?: Partial<TOptions>): ExtractorInstance<TResult>
 }
 

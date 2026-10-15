@@ -26,6 +26,9 @@ export interface PyinResult {
   voiced: boolean
 }
 
+/** Viterbi lag in frames unless `delay` says otherwise. */
+export const PYIN_DELAY_DEFAULT = 5
+
 const LOG_EPS = -30
 const NEIGHBOR = 4
 
@@ -64,7 +67,7 @@ export class PyinTracker {
     this.minHz = options.sampleRate / options.maxLag
     const maxHz = options.sampleRate / options.minLag
     this.binCents = options.binCents ?? 20
-    this.delay = Math.max(0, options.delay ?? 5)
+    this.delay = Math.max(0, options.delay ?? PYIN_DELAY_DEFAULT)
     this.boltzmann = options.boltzmann ?? 2
     this.binCount = Math.max(
       2,

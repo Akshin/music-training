@@ -8,7 +8,7 @@
 
 import { resolveAnalysisContext, type AnalyzerStats } from '../../core/analysis/analyzer'
 import type { AnalysisContext } from '../../core/analysis/extractor'
-import { collectColumns, resolveExtractors } from '../../core/analysis/graph'
+import { collectColumns, columnLags, resolveExtractors } from '../../core/analysis/graph'
 import { resolveFeatureIds } from '../../core/analysis/registry'
 import type { AudioChunk } from '../../core/model/audio'
 import { Timeline } from '../../core/model/timeline'
@@ -75,6 +75,7 @@ export class WorkerHost {
       hopSize: this.context.hopSize,
       originSample: this.context.frameSize / 2,
       columns: collectColumns(extractors),
+      lags: columnLags(extractors, this.context, options.options),
     })
     this.mirror = new TimelineMirror(this.timeline)
     this.ready = new Promise<ReadyMessage>((resolve, reject) => {

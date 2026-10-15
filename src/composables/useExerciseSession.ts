@@ -1,12 +1,16 @@
 import { computed, onScopeDispose, readonly, ref, shallowRef, watch, type Ref } from 'vue'
 import {
   BeatGrid,
+  analysisDelaySeconds,
   scoreTake,
   segmentTake,
+  segmentationLookahead,
   type MapPosition,
   type NoteEvent,
   type ScoreOptions,
+  type SegmentationOptions,
   type TakeScore,
+  type TakeSegmentation,
 } from '@audio-core/core/index'
 import { WebLoop } from '@audio-core/host/web/web-loop'
 import { WebTransport } from '@audio-core/host/web/web-transport'
@@ -14,12 +18,40 @@ import { WorkerHost } from '@audio-core/host/web/worker-host'
 import { MicSource, type MicSourceInfo } from '@audio-core/io/mic-source'
 import { EMPTY_PITCH_TRACE, type PitchTrace } from '@/components/pitch/trace'
 import { useCalibration } from '@/composables/useCalibration'
+import { useLatency } from '@/composables/useLatency'
 import { VOICE_FLOOR_DB, inputKey, levelMap, voiceFloorDb } from '@/training/calibration'
+import { deviceKey } from '@/training/latency'
 import { BEATS_DEFAULT, BPM_DEFAULT, meterFor } from '@/training/tempo'
 import type { Timbre } from '@/training/timbre'
 
 /** Musical position the listener hears right now, or `null` while the transport is stopped. */
 export type TrainingClock = () => MapPosition | null
+
+/** The playback grid pinned to the trace clock: enough to read a take against it later. */
+export interface GridAnchor {
+  /** Where the listener is on the grid. */
+  readonly position: MapPosition
+  /** Seconds from a moment on the grid to the trace frame that catches a response to it. */
+  readonly offset: number
+  /** The part of `offset` that was measured for these devices rather than reported (`useLatency`). */
+  readonly measured: number
+}
+
+/** Where the time goes between a sound and what the session makes of it, seconds. */
+export interface SessionDelays {
+  /** Samples the microphone gathers before it hands them on. */
+  readonly capture: number
+  /** Waiting for the second half of the analysis window. */
+  readonly window: number
+  /** Longest wait for the next frame. */
+  readonly hop: number
+  /** How much later than the level the pitch is known (the pitch tracker settles late). */
+  readonly pitch: number
+  /** Sound past a note's start that the segmenter needs before it reports the note. */
+  readonly notes: number
+  /** Output latency the browser reports, applied to every grid moment. */
+  readonly output: number
+}
 
 export type MicState = 'idle' | 'starting' | 'running'
 
@@ -34,6 +66,8 @@ export interface ExerciseSessionOptions {
   readonly listen?: boolean
   /** Seconds the average loudness is taken over. Default 1 — what calibration measures notes by. */
   readonly averageSeconds?: number
+  /** Keep the microphone's samples, for `samplesBetween` (latency calibration). Default false. */
+  readonly record?: boolean
 }
 
 /** Seconds the meter level takes to fall from full to empty once the sound stops. Rises are instant. */
@@ -79,6 +113,9 @@ export function useExerciseSession(options: ExerciseSessionOptions = {}) {
   const micInfo = shallowRef<MicSourceInfo | null>(null)
   const pitch = shallowRef<PitchTrace>(EMPTY_PITCH_TRACE)
   const timbre = shallowRef<Timbre | null>(null)
+  const delays = shallowRef<SessionDelays | null>(null)
+  /** The output the context plays to, as the browser names it; empty when it does not. */
+  const outputName = ref('')
 
   let context: AudioContext | null = null
   let transport: WebTransport | null = null
@@ -100,6 +137,8 @@ export function useExerciseSession(options: ExerciseSessionOptions = {}) {
   let loudFrames = new Float32Array(0)
   let dbfsFrames = new Float32Array(0)
   let peakFrames = new Float32Array(0)
+  /** Reads waiting for the analysis to catch up: the frame each needs, and its answer. */
+  let waiters: { frame: number; resolve: (ready: boolean) => void }[] = []
   const harmonicFrames = [0, 1, 2].map(() => new Float32Array(TIMBRE_FRAMES))
 
   // The input's calibration lays the meter scale and sets where a voice starts; without one the
@@ -109,6 +148,12 @@ export function useExerciseSession(options: ExerciseSessionOptions = {}) {
     micInfo.value === null ? null : inputKey(micInfo.value.label, micInfo.value.deviceId),
   )
   const calibration = computed(() => calibrationOf(inputName.value))
+  // Latency measured for this input and output, on top of what the browser reports.
+  const { latencyOf } = useLatency()
+  const deviceName = computed(() =>
+    inputName.value === null ? null : deviceKey(inputName.value, outputName.value),
+  )
+  const measuredLatency = computed(() => latencyOf(deviceName.value) ?? 0)
   let toLevel = levelMap(null)
   let voiceFloor = VOICE_FLOOR_DB
   watch(
@@ -185,7 +230,7 @@ export function useExerciseSession(options: ExerciseSessionOptions = {}) {
         sampleRate: info.sampleRate,
         features: ['level', 'pitch', 'harmonics'],
         options: { f0: { tracker: 'pyin' } },
-        record: false,
+        record: options.record === true,
       })
       host = worker
       worker.onError((message) => {
@@ -193,9 +238,14 @@ export function useExerciseSession(options: ExerciseSessionOptions = {}) {
         void stopListening()
       })
       worker.attachCapture(source.createPort())
+      worker.onFrames(settleWaiters)
       await worker.ready
       if (run !== micRun) return
       captureOrigin = origin
+      delays.value = delaysOf(worker, info, ctx)
+      void outputLabel(ctx).then((label) => {
+        if (run === micRun) outputName.value = label
+      })
       const capacity = Math.round(TRACE_SECONDS * worker.timeline.frameRate)
       midiFrames = new Float32Array(capacity)
       loudFrames = new Float32Array(capacity)
@@ -233,7 +283,56 @@ export function useExerciseSession(options: ExerciseSessionOptions = {}) {
     micInfo.value = null
     pitch.value = EMPTY_PITCH_TRACE
     timbre.value = null
+    delays.value = null
+    outputName.value = ''
+    for (const waiter of waiters) waiter.resolve(false)
+    waiters = []
     micState.value = 'idle'
+  }
+
+  /** Answers the reads whose frames have arrived. */
+  function settleWaiters(): void {
+    const known = host?.timeline.length ?? 0
+    waiters = waiters.filter((waiter) => {
+      if (waiter.frame >= known) return true
+      waiter.resolve(true)
+      return false
+    })
+  }
+
+  /**
+   * Resolves once notes sung up to `traceSeconds` can be read: the analysis has described the sound
+   * up to there — every column, the late pitch included — and the segmenter has the frames past it
+   * it needs to report a note that began there. False when the microphone stops first.
+   */
+  function notesReady(traceSeconds: number): Promise<boolean> {
+    const worker = host
+    if (worker === null) return Promise.resolve(false)
+    const { timeline } = worker
+    const lag = Math.max(0, ...timeline.columns.map((name) => timeline.lag(name)))
+    const until = traceSeconds + segmentationLookahead(timeline.frameRate)
+    const frame = timeline.frameAt(until) + lag
+    return new Promise((resolve) => {
+      waiters.push({ frame, resolve })
+      settleWaiters()
+    })
+  }
+
+  /**
+   * The microphone's samples between two moments of the trace clock, and the moment of the first.
+   * Null unless the session records (`record: true`) and the microphone is on; past what has
+   * arrived, silence.
+   */
+  async function samplesBetween(
+    fromSeconds: number,
+    toSeconds: number,
+  ): Promise<{ samples: Float32Array; start: number } | null> {
+    const worker = host
+    if (worker === null || options.record !== true) return null
+    const rate = worker.context.sampleRate
+    const startSample = Math.max(0, Math.round(fromSeconds * rate))
+    const count = Math.max(0, Math.round(toSeconds * rate) - startSample)
+    return { samples: await worker.readPcm(startSample, count), start: startSample / rate }
   }
 
   function tick(now: number): void {
@@ -320,7 +419,7 @@ export function useExerciseSession(options: ExerciseSessionOptions = {}) {
     if (context === null || transport === null || !transport.running) return null
     if (micState.value !== 'running') return null
     const roundTrip = (context.outputLatency || 0) + (context.baseLatency || 0)
-    return transport.audioOrigin - captureOrigin + roundTrip
+    return transport.audioOrigin - captureOrigin + roundTrip + measuredLatency.value
   }
 
   /** Trace-clock seconds of a grid moment (seconds from the transport's beat 0). */
@@ -352,8 +451,40 @@ export function useExerciseSession(options: ExerciseSessionOptions = {}) {
       from + offset - SCORE_MARGIN_SECONDS,
       to + offset + SCORE_MARGIN_SECONDS,
     )
-    const { notes: sung } = segmentTake(worker.timeline, start, end)
+    const { notes: sung } = segmentTake(worker.timeline, start, end, voiceGate())
     return scoreTake(targets, sung, grid, worker.timeline, { latencySeconds: offset, ...scoring })
+  }
+
+  /**
+   * The grid as it plays now and where it sits on the trace clock. It stays true after playback
+   * stops, so a take can be read once its last frames are analysed. Null unless playing and
+   * listening.
+   */
+  function gridAnchor(): GridAnchor | null {
+    const offset = captureOffset()
+    const position = clock()
+    return offset === null || position === null
+      ? null
+      : { position, offset, measured: measuredLatency.value }
+  }
+
+  /**
+   * Notes and slides sung between two moments of the trace clock (see `GridAnchor.offset`), in
+   * seconds of that clock. Null while the microphone is off.
+   */
+  function sungBetween(fromSeconds: number, toSeconds: number): TakeSegmentation | null {
+    if (host === null) return null
+    const { start, end } = host.timeline.range(fromSeconds, toSeconds)
+    return segmentTake(host.timeline, start, end, voiceGate())
+  }
+
+  /**
+   * Where the segmenter takes sound to start: the input's voice floor, the same the pitch trace
+   * uses. Its own gate adapts to the quietest tenth of what it reads, which in a bar sung legato
+   * from end to end is the voice itself, and then nothing passes.
+   */
+  function voiceGate(): SegmentationOptions {
+    return { phrases: { gateDb: voiceFloor } }
   }
 
   /** Reference notes to play along the clicks, their beats counted within tempo-map `epoch`. */
@@ -475,10 +606,50 @@ export function useExerciseSession(options: ExerciseSessionOptions = {}) {
     stopListening,
     traceTimeOf,
     scoreNotes,
+    gridAnchor,
+    sungBetween,
+    notesReady,
+    samplesBetween,
+    /** Where the time goes from a sound to its notes; null while the microphone is off. */
+    delays: readonly(delays),
+    /** What a latency measurement is stored under: this input and output; null while off. */
+    device: deviceName,
+    /** Latency measured for these devices beyond what the browser reports, seconds; 0 if none. */
+    measuredLatency,
   }
 }
 
 export type ExerciseSession = ReturnType<typeof useExerciseSession>
+
+/** The delays of a running microphone and its analysis. */
+function delaysOf(worker: WorkerHost, info: MicSourceInfo, context: AudioContext): SessionDelays {
+  const { timeline } = worker
+  return {
+    capture: info.batchSize / info.sampleRate,
+    window: analysisDelaySeconds(worker.context),
+    hop: timeline.frameDuration,
+    pitch: timeline.lag('midi') * timeline.frameDuration,
+    notes: segmentationLookahead(timeline.frameRate),
+    output: (context.outputLatency || 0) + (context.baseLatency || 0),
+  }
+}
+
+/**
+ * The name of the output the context plays to: its chosen sink, or the system default, which
+ * browsers that list outputs name after the device behind it. Empty when outputs are not listed.
+ */
+async function outputLabel(context: AudioContext): Promise<string> {
+  try {
+    const sink = (context as AudioContext & { sinkId?: unknown }).sinkId
+    const id = typeof sink === 'string' && sink !== '' ? sink : 'default'
+    const outputs = (await navigator.mediaDevices.enumerateDevices()).filter(
+      (device) => device.kind === 'audiooutput',
+    )
+    return (outputs.find((device) => device.deviceId === id) ?? outputs[0])?.label ?? ''
+  } catch {
+    return ''
+  }
+}
 
 /**
  * Mean of dBFS frames `[from, to)` taken in power, so a pause weighs what it sounds like — nearly

@@ -74,6 +74,15 @@ interface RawNote {
   values: number[]
 }
 
+/**
+ * Seconds of sound after a note begins before the greedy pass can report it: a stable `minNoteMs`
+ * window, read through the median filter, which looks half its width ahead.
+ */
+export function noteLookaheadSeconds(frameRate: number, options: NoteOptions = {}): number {
+  const medianFrames = options.medianFrames ?? DEFAULTS.medianFrames
+  return (options.minNoteMs ?? DEFAULTS.minNoteMs) / 1000 + Math.floor(medianFrames / 2) / frameRate
+}
+
 export function median(values: readonly number[]): number {
   if (values.length === 0) return NaN
   const sorted = Array.from(values).sort((a, b) => a - b)
@@ -233,9 +242,9 @@ export function segmentNotes(
   const base = phrase.startFrame
   const count = phrase.endFrame - phrase.startFrame
 
-  const raw = timeline.slice(midiColumn, phrase.startFrame, phrase.endFrame)
+  const raw = timeline.alignedSlice(midiColumn, phrase.startFrame, phrase.endFrame)
   if (timeline.columns.includes(confidenceColumn)) {
-    const confidence = timeline.slice(confidenceColumn, phrase.startFrame, phrase.endFrame)
+    const confidence = timeline.alignedSlice(confidenceColumn, phrase.startFrame, phrase.endFrame)
     for (let i = 0; i < count; i++) if (confidence[i] < voicingThreshold) raw[i] = NaN
   }
   const contour = medianFilterVoiced(raw, options.medianFrames ?? DEFAULTS.medianFrames)

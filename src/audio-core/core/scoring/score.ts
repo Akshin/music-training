@@ -170,7 +170,7 @@ function meanDb(timeline: Timeline | undefined, start: number, end: number): num
   let sum = 0
   let n = 0
   for (let i = start; i < end && i < timeline.length; i++) {
-    const value = timeline.get('dbfs', i)
+    const value = timeline.alignedGet('dbfs', i)
     if (Number.isFinite(value)) {
       sum += value
       n++

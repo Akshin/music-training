@@ -19,6 +19,11 @@ export interface TimelineSpec {
   readonly originSample: number
   /** Scalar features stored per frame. */
   readonly columns: readonly string[]
+  /**
+   * Frames a column runs behind: the value stored at frame `i + lag` describes frame `i`. A tracker
+   * that settles a frame only after seeing the next few (pYIN) writes late. Default 0.
+   */
+  readonly lags?: Readonly<Record<string, number>>
   /** Frames per storage block. Must be a power of two. Default 4096. */
   readonly blockFrames?: number
 }
@@ -90,6 +95,7 @@ export class Timeline {
   readonly originSample: number
   readonly columns: readonly string[]
   private readonly byName = new Map<string, Column>()
+  private readonly lags = new Map<string, number>()
   private frames = 0
 
   constructor(spec: TimelineSpec) {
@@ -102,6 +108,13 @@ export class Timeline {
     for (const name of this.columns) {
       if (this.byName.has(name)) throw new Error(`Duplicate timeline column "${name}"`)
       this.byName.set(name, new Column(name, blockFrames))
+    }
+    for (const [name, lag] of Object.entries(spec.lags ?? {})) {
+      if (!this.byName.has(name)) throw new Error(`Lag for unknown timeline column "${name}"`)
+      if (!Number.isInteger(lag) || lag < 0) {
+        throw new RangeError(`Lag of "${name}" must be a whole number of frames, got ${lag}`)
+      }
+      if (lag > 0) this.lags.set(name, lag)
     }
   }
 
@@ -182,6 +195,34 @@ export class Timeline {
       throw new RangeError(`Frame ${index} is outside the timeline (length ${this.frames})`)
     }
     this.column(name).set(index, value)
+  }
+
+  /** Frames column `name` runs behind the frame it describes (see `TimelineSpec.lags`). */
+  lag(name: string): number {
+    this.column(name)
+    return this.lags.get(name) ?? 0
+  }
+
+  /** The value that describes frame `index`: read `lag` frames later; NaN until it is written. */
+  alignedGet(name: string, index: number): number {
+    const at = index + this.lag(name)
+    return at < this.frames ? this.column(name).get(at) : NaN
+  }
+
+  /**
+   * `slice` moved back by the column's lag, so element `i` describes frame `start + i` like every
+   * other column does. Frames whose value has not been written yet read as NaN.
+   */
+  alignedSlice(name: string, start = 0, end = this.frames, out?: Float32Array): Float32Array {
+    const clampedEnd = Math.min(end, this.frames)
+    const count = Math.max(0, clampedEnd - start)
+    const target = out ?? new Float32Array(count)
+    const lag = this.lag(name)
+    const from = start + lag
+    const known = Math.max(0, Math.min(count, this.frames - from))
+    this.column(name).copyTo(target, from, from + known)
+    target.fill(NaN, known, count)
+    return target
   }
 
   /** Most recent value of a column, or NaN when the timeline is empty. */

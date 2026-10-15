@@ -49,7 +49,7 @@ function mean(values: readonly number[]): number {
 function voicedMidi(timeline: Timeline, column: string, from: number, to: number): number[] {
   const values: number[] = []
   for (let i = from; i < to; i++) {
-    const midi = timeline.get(column, i)
+    const midi = timeline.alignedGet(column, i)
     if (Number.isFinite(midi)) values.push(midi)
   }
   return values
@@ -82,8 +82,8 @@ function classifyOne(
     const rates: number[] = []
     const extents: number[] = []
     for (let i = note.startFrame; i < note.endFrame; i++) {
-      const rate = timeline.get(rateColumn, i)
-      const extent = timeline.get(extentColumn, i)
+      const rate = timeline.alignedGet(rateColumn, i)
+      const extent = timeline.alignedGet(extentColumn, i)
       if (rate >= 4 && rate <= 12 && extent >= minExtent) {
         rates.push(rate)
         extents.push(extent)

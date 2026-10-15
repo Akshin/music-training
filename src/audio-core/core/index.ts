@@ -36,8 +36,8 @@ export { TONE_RELEASE_SECONDS, renderTone } from './synthesis/tone'
 // scoring
 export type { LatencyEstimate, LatencyOptions } from './scoring/latency'
 export { estimateLatency } from './scoring/latency'
-export type { OnsetOptions } from './scoring/onsets'
-export { onsetTimes } from './scoring/onsets'
+export type { OnsetOptions, PcmOnsetOptions } from './scoring/onsets'
+export { onsetTimes, pcmOnsets } from './scoring/onsets'
 export type {
   LevelScore,
   NoteScore,
@@ -72,7 +72,7 @@ export { durandKerner } from './dsp/roots'
 export type { YinOptions, YinResult } from './dsp/yin'
 export { Yin } from './dsp/yin'
 export type { PyinOptions, PyinResult } from './dsp/pyin'
-export { PyinTracker } from './dsp/pyin'
+export { PYIN_DELAY_DEFAULT, PyinTracker } from './dsp/pyin'
 export { Cepstrum, cepstralPeakProminence } from './dsp/cepstrum'
 
 // analysis
@@ -95,11 +95,12 @@ export type {
 export {
   Analyzer,
   DEFAULT_FRAME_SIZE,
+  analysisDelaySeconds,
   createAnalyzer,
   defaultHopSize,
   resolveAnalysisContext,
 } from './analysis/analyzer'
-export { collectColumns, resolveExtractors } from './analysis/graph'
+export { collectColumns, columnLags, resolveExtractors } from './analysis/graph'
 export { extractorRegistry, resolveFeatureIds } from './analysis/registry'
 export { FrameBuffer } from './analysis/frame-buffer'
 export { analyzeOffline } from './analysis/offline'
@@ -156,7 +157,16 @@ export type {
 export type { SegmentationOptions } from './segmentation/index'
 export type { MauchOptions } from './segmentation/mauch'
 export type { GestureOptions, NoteGesture, PitchGesture } from './segmentation/gestures'
-export { classifyGestures, segmentTake, transcribeNotes } from './segmentation/index'
+export {
+  classifyGestures,
+  segmentTake,
+  segmentationLookahead,
+  transcribeNotes,
+} from './segmentation/index'
+
+// transcription
+export type { GridNote, GridTranscription, QuantizeOptions } from './transcription/quantize'
+export { quantizeNotes } from './transcription/quantize'
 
 // transport (host ↔ worker ↔ capture)
 export type {

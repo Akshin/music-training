@@ -22,7 +22,7 @@ import type {
   ResultReader,
 } from './extractor'
 import { FrameBuffer } from './frame-buffer'
-import { collectColumns, resolveExtractors } from './graph'
+import { collectColumns, columnLags, resolveExtractors } from './graph'
 
 export interface AnalyzerConfig {
   readonly sampleRate: number
@@ -55,6 +55,15 @@ const ZERO_BLOCK = new Float32Array(4096)
 /** Hop that yields exactly 100 frames/s: 480 at 48 kHz, 441 at 44.1 kHz. */
 export function defaultHopSize(sampleRate: number): number {
   return Math.round(sampleRate / 100)
+}
+
+/**
+ * Seconds from a sound to the frame that describes it being analysed: the frame is stamped at the
+ * centre of its window, so it waits for the second half of it, and a column that lags (see
+ * `TimelineSpec.lags`) waits that many hops more. Capture and transport come on top.
+ */
+export function analysisDelaySeconds(context: AnalysisContext, lagFrames = 0): number {
+  return (context.frameSize / 2 + lagFrames * context.hopSize) / context.sampleRate
 }
 
 /** Fills in the defaults of an `AnalyzerConfig`. Hosts use it to mirror the timeline geometry. */
@@ -148,6 +157,7 @@ export class Analyzer {
       hopSize,
       originSample: frameSize / 2,
       columns: collectColumns(this.extractors),
+      lags: columnLags(this.extractors, this.context, options),
       ...(config.blockFrames === undefined ? {} : { blockFrames: config.blockFrames }),
     })
     this.results = this.store

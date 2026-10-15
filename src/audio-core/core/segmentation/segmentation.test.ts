@@ -375,6 +375,37 @@ describe('segmentTake on synthesised exercises', () => {
   })
 })
 
+describe('segmentTake on a lagging pitch tracker', () => {
+  it('places notes where they sounded, not where pYIN settled them', () => {
+    const signal = noteSequence([
+      seq.pause(0.5),
+      seq.note(C4, 0.4),
+      seq.note(D4, 0.4),
+      seq.note(E4, 0.4),
+      seq.pause(0.3),
+      seq.note(G4, 0.5),
+      seq.pause(0.3),
+    ])
+    const starts = (options: Record<string, object>) => {
+      const { timeline } = analyzeOffline(
+        signal.samples,
+        { sampleRate: TEST_SAMPLE_RATE },
+        [pitch, level],
+        options,
+      )
+      return segmentTake(timeline).notes.map((n) => n.startTime)
+    }
+    const yin = starts({})
+    const pyin = starts({ f0: { tracker: 'pyin' } })
+    expect(pyin).toHaveLength(4)
+    const truth = [0.5, 0.9, 1.3, 2.0]
+    pyin.forEach((start, i) => {
+      expect(Math.abs(start - truth[i])).toBeLessThan(0.025)
+      expect(Math.abs(start - yin[i])).toBeLessThan(0.025)
+    })
+  })
+})
+
 describe('segmentTake method mauch (Tony HMM)', () => {
   const mauch = { method: 'mauch' as const }
 

@@ -1,8 +1,8 @@
 import type { Timeline } from '../model/timeline'
 import type { MauchOptions } from './mauch'
-import { transcribeNotes } from './mauch'
-import { segmentNotes, type NoteOptions } from './notes'
-import { segmentPhrases, type PhraseOptions } from './phrases'
+import { mauchLookaheadSeconds, transcribeNotes } from './mauch'
+import { noteLookaheadSeconds, segmentNotes, type NoteOptions } from './notes'
+import { minPhraseSeconds, segmentPhrases, type PhraseOptions } from './phrases'
 import type { NoteSegment, Phrase, Slide, TakeSegmentation } from './types'
 
 export interface SegmentationOptions {
@@ -39,6 +39,22 @@ function attachPhrases(notes: readonly NoteSegment[], phrases: readonly Phrase[]
     })
   }
   return attached
+}
+
+/**
+ * Seconds of sound a take needs past its last onset before `segmentTake` reports the note that
+ * starts there: the note has to hold long enough to be a note, and the sound long enough to be a
+ * phrase. Read a take at least this long after the moment it should cover.
+ */
+export function segmentationLookahead(
+  frameRate: number,
+  options: SegmentationOptions = {},
+): number {
+  const notes =
+    options.method === 'mauch'
+      ? mauchLookaheadSeconds(options.mauch)
+      : noteLookaheadSeconds(frameRate, options.notes)
+  return Math.max(notes, minPhraseSeconds(options.phrases))
 }
 
 /** Phrases → notes and slides over `[startFrame, endFrame)` of a timeline. */
