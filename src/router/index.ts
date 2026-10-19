@@ -149,6 +149,13 @@ const router = createRouter({
       meta: { title: 'Лаборатория' },
     },
     {
+      // The test, opened from a link, so no account is needed.
+      path: '/lab/ink',
+      name: 'ink',
+      component: () => import('@/views/InkView.vue'),
+      meta: { title: 'Тушь', public: true },
+    },
+    {
       path: '/:pathMatch(.*)*',
       name: 'not-found',
       component: () => import('@/views/NotFoundView.vue'),
